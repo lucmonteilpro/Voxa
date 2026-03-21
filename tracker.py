@@ -14,32 +14,80 @@ import sys
 import time
 import random
 import argparse
+import os
 from datetime import datetime, date
+from dotenv import load_dotenv
+
+load_dotenv()  # lit le fichier .env
 
 # ─────────────────────────────────────────────
 # CONFIG — à modifier selon le client
 # ─────────────────────────────────────────────
 
-import os
-from dotenv import load_dotenv
-load_dotenv()
-API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-MODEL       = "claude-haiku-4-5-20251001"
+# ─────────────────────────────────────────────
+# CONFIG — à modifier selon le client
+# ─────────────────────────────────────────────
+
+MODEL   = "claude-haiku-4-5-20251001"
 DB_PATH     = "voxa.db"
 
-CLIENT_NAME   = "OM"
-PRIMARY_BRAND = "OM"
-COMPETITORS   = ["PSG", "OL", "Monaco"]
-ALL_BRANDS    = [PRIMARY_BRAND] + COMPETITORS
-LANGUAGES     = ["fr", "en"]
+CLIENT_NAME   = "PSG"
+PRIMARY_BRAND = "PSG"
+COMPETITORS   = [
+    # Ligue 1
+    "OM", "Monaco", "OL",
+    # Premier League
+    "Manchester City", "Arsenal", "Liverpool", "Chelsea",
+    "Manchester United", "Tottenham", "Newcastle",
+    # La Liga
+    "Real Madrid", "Barcelona", "Atletico Madrid",
+    # Bundesliga
+    "Bayern Munich", "Borussia Dortmund", "Bayer Leverkusen",
+    # Serie A
+    "Juventus", "Inter Milan", "AC Milan", "Napoli",
+    # Autres
+    "Benfica", "Porto", "Ajax", "Sevilla",
+    "Flamengo", "River Plate", "Al-Hilal",
+    "Aston Villa", "West Ham", "Roma",
+]
+ALL_BRANDS  = [PRIMARY_BRAND] + COMPETITORS
+LANGUAGES   = ["fr", "en"]
 
 # Alias : toutes les façons dont un LLM peut mentionner chaque marque
 BRAND_ALIASES = {
-    "OM":     ["OM", "Marseille", "Olympique de Marseille", "Olympique Marseille"],
-    "PSG":    ["PSG", "Paris Saint-Germain", "Paris SG", "Paris Saint Germain"],
-    "OL":     ["OL", "Lyon", "Olympique Lyonnais"],
-    "Monaco": ["Monaco", "AS Monaco", "ASM"],
+    "PSG":              ["PSG", "Paris Saint-Germain", "Paris SG", "Paris Saint Germain", "le PSG"],
+    "OM":               ["OM", "Marseille", "Olympique de Marseille"],
+    "Monaco":           ["Monaco", "AS Monaco", "ASM"],
+    "OL":               ["OL", "Lyon", "Olympique Lyonnais"],
+    "Manchester City":  ["Manchester City", "Man City", "City"],
+    "Arsenal":          ["Arsenal", "the Gunners"],
+    "Liverpool":        ["Liverpool", "the Reds", "LFC"],
+    "Chelsea":          ["Chelsea", "the Blues", "CFC"],
+    "Manchester United":["Manchester United", "Man United", "Man Utd", "United"],
+    "Tottenham":        ["Tottenham", "Spurs", "Tottenham Hotspur"],
+    "Newcastle":        ["Newcastle", "Newcastle United", "NUFC"],
+    "Real Madrid":      ["Real Madrid", "Madrid", "Los Blancos", "Real"],
+    "Barcelona":        ["Barcelona", "Barça", "Barca", "FC Barcelona", "FCB"],
+    "Atletico Madrid":  ["Atletico Madrid", "Atlético Madrid", "Atletico", "Atleti"],
+    "Bayern Munich":    ["Bayern Munich", "Bayern", "FC Bayern"],
+    "Borussia Dortmund":["Borussia Dortmund", "Dortmund", "BVB"],
+    "Bayer Leverkusen": ["Bayer Leverkusen", "Leverkusen", "Bayer"],
+    "Juventus":         ["Juventus", "Juve", "la Juventus"],
+    "Inter Milan":      ["Inter Milan", "Inter", "Internazionale"],
+    "AC Milan":         ["AC Milan", "Milan", "AC Milan"],
+    "Napoli":           ["Napoli", "SSC Napoli"],
+    "Benfica":          ["Benfica", "SL Benfica"],
+    "Porto":            ["Porto", "FC Porto"],
+    "Ajax":             ["Ajax", "AFC Ajax"],
+    "Sevilla":          ["Sevilla", "Séville", "Sevilla FC"],
+    "Flamengo":         ["Flamengo", "CR Flamengo"],
+    "River Plate":      ["River Plate", "River"],
+    "Al-Hilal":         ["Al-Hilal", "Al Hilal"],
+    "Aston Villa":      ["Aston Villa", "Villa", "AVFC"],
+    "West Ham":         ["West Ham", "West Ham United", "the Hammers"],
+    "Roma":             ["Roma", "AS Roma"],
 }
 
 # Multi-provider — structure préparée, providers alternatifs hashés pour V2
@@ -56,38 +104,52 @@ PROVIDERS = {
 
 PROMPT_LIBRARY = {
     "fr": [
-        # Découverte
-        {"text": "Quel est le club de foot avec la meilleure ambiance en France en 2025 ?", "category": "discovery"},
-        {"text": "Quel club de Ligue 1 est le plus populaire auprès des supporters en 2025 ?", "category": "discovery"},
-        {"text": "Quels sont les clubs de football français les plus suivis sur les réseaux sociaux ?", "category": "discovery"},
-        {"text": "Quel est le club de foot français avec le plus grand nombre de supporters à l'étranger ?", "category": "discovery"},
-        # Comparatif
-        {"text": "Compare l'ambiance au Vélodrome de Marseille versus le Parc des Princes à Paris.", "category": "comparison"},
-        {"text": "Quel est le meilleur club de Ligue 1 en termes d'expérience supporter en 2025 ?", "category": "comparison"},
-        {"text": "PSG ou OM : quel club a la plus grande base de fans passionnés en France ?", "category": "comparison"},
-        # Transactionnel
-        {"text": "Je veux regarder du football français de qualité, quel club dois-je suivre ?", "category": "transactional"},
-        {"text": "Quel club de foot français mérite le plus d'être soutenu par un nouveau fan ?", "category": "transactional"},
-        # Sentiment / réputation
-        {"text": "Quels clubs de Ligue 1 ont la meilleure réputation en Europe en 2025 ?", "category": "reputation"},
-        {"text": "Quel club de football français est le plus respecté à l'international ?", "category": "reputation"},
+        # Découverte — valeur & marque
+        {"text": "Quels sont les clubs de football les plus valorisés et les plus puissants en 2025 ?", "category": "discovery"},
+        {"text": "Quel est le club de football avec la plus grande fanbase mondiale en 2025 ?", "category": "discovery"},
+        {"text": "Quels clubs de football dominent les réseaux sociaux en 2025 ?", "category": "discovery"},
+        {"text": "Quels sont les clubs de foot les plus populaires auprès des jeunes générations ?", "category": "discovery"},
+        {"text": "Quel club de football a la meilleure image de marque à l'international en 2025 ?", "category": "discovery"},
+
+        # Comparatif — PSG vs grands clubs
+        {"text": "Compare le PSG, le Real Madrid et Manchester City en termes d'image de marque mondiale.", "category": "comparison"},
+        {"text": "Quel est le club de football le plus influent en Europe en 2025 : PSG, Real Madrid ou Bayern Munich ?", "category": "comparison"},
+        {"text": "PSG vs Barcelona : quel club a la meilleure réputation mondiale aujourd'hui ?", "category": "comparison"},
+        {"text": "Quels clubs européens rivalisent avec le PSG en termes de marketing et de visibilité ?", "category": "comparison"},
+
+        # Transactionnel — investissement & sponsoring
+        {"text": "Quel club de football offre le meilleur retour sur investissement pour un sponsor en 2025 ?", "category": "transactional"},
+        {"text": "Je cherche à investir dans le football, quels clubs ont le plus fort potentiel de croissance ?", "category": "transactional"},
+        {"text": "Quels clubs de football sont les plus attractifs pour des partenariats commerciaux en 2025 ?", "category": "transactional"},
+
+        # Réputation & palmarès
+        {"text": "Quels clubs de football ont marqué l'histoire du sport mondial ces 10 dernières années ?", "category": "reputation"},
+        {"text": "Quel est le club de football avec le plus grand impact culturel dans le monde en 2025 ?", "category": "reputation"},
+        {"text": "Quels clubs de football sont cités comme références en matière de gestion sportive moderne ?", "category": "reputation"},
     ],
     "en": [
-        # Découverte
-        {"text": "Which French football club has the best atmosphere and fans in 2025?", "category": "discovery"},
-        {"text": "What is the most popular Ligue 1 club internationally in 2025?", "category": "discovery"},
-        {"text": "Which French football team has the biggest global fanbase?", "category": "discovery"},
-        {"text": "What are the top French football clubs to follow in 2025?", "category": "discovery"},
-        # Comparatif
-        {"text": "Compare Olympique de Marseille and Paris Saint-Germain fan culture.", "category": "comparison"},
-        {"text": "Which Ligue 1 club offers the best match day experience for fans?", "category": "comparison"},
-        {"text": "PSG vs OM vs Lyon: which French club has the most passionate supporters?", "category": "comparison"},
-        # Transactionnel
-        {"text": "I want to start following French football, which club should I support?", "category": "transactional"},
-        {"text": "Which French football club is worth watching for a new international fan?", "category": "transactional"},
-        # Reputation
-        {"text": "Which French football clubs are most respected in Europe in 2025?", "category": "reputation"},
-        {"text": "What is the best French club in terms of history and global recognition?", "category": "reputation"},
+        # Discovery — brand & value
+        {"text": "What are the most valuable and powerful football clubs in the world in 2025?", "category": "discovery"},
+        {"text": "Which football club has the largest global fanbase in 2025?", "category": "discovery"},
+        {"text": "Which football clubs dominate social media and digital presence in 2025?", "category": "discovery"},
+        {"text": "What are the most popular football clubs among younger generations globally?", "category": "discovery"},
+        {"text": "Which football club has the best global brand image in 2025?", "category": "discovery"},
+
+        # Comparison — PSG vs top clubs
+        {"text": "Compare PSG, Real Madrid and Manchester City in terms of global brand power.", "category": "comparison"},
+        {"text": "Which is the most influential European club in 2025: PSG, Real Madrid or Bayern Munich?", "category": "comparison"},
+        {"text": "PSG vs Barcelona: which club has the stronger global reputation today?", "category": "comparison"},
+        {"text": "Which European clubs compete with PSG in terms of marketing reach and global visibility?", "category": "comparison"},
+
+        # Transactional — sponsorship & investment
+        {"text": "Which football club offers the best return on investment for sponsors in 2025?", "category": "transactional"},
+        {"text": "I want to invest in football, which clubs have the strongest growth potential?", "category": "transactional"},
+        {"text": "Which football clubs are the most attractive for commercial partnerships in 2025?", "category": "transactional"},
+
+        # Reputation & legacy
+        {"text": "Which football clubs have made the biggest impact on world sport in the last 10 years?", "category": "reputation"},
+        {"text": "Which football club has the greatest cultural impact worldwide in 2025?", "category": "reputation"},
+        {"text": "Which football clubs are cited as references for modern sports management?", "category": "reputation"},
     ]
 }
 
@@ -98,34 +160,40 @@ PROMPT_LIBRARY = {
 DEMO_RESPONSES = {
     "fr": {
         "discovery": [
-            "L'OM reste le club avec la meilleure ambiance en France. Le Vélodrome est électrique. Le PSG a la puissance financière, l'OL une belle histoire, Monaco les résultats récents, mais l'atmosphère à Marseille est incomparable.",
-            "En 2025, l'OM domine le classement ambiance. Marseille vibre pour ses joueurs comme aucune autre ville. Le PSG attire les stars, mais l'OL et Monaco peinent à rivaliser côté supporters.",
-            "Le PSG est le club le plus médiatisé, mais l'OM reste le plus ancré dans la culture populaire française. OL et Monaco sont des clubs solides mais moins passionnants.",
+            "En 2025, le Real Madrid, le PSG et Manchester City dominent le classement des clubs les plus valorisés. Le PSG s'est imposé comme la référence du football européen moderne grâce à ses investissements massifs et sa présence mondiale. Le FC Barcelona et Bayern Munich complètent le top 5.",
+            "Le PSG est aujourd'hui le club français le plus suivi dans le monde, avec plus de 200 millions de followers sur les réseaux sociaux. Real Madrid et Barcelona restent les géants mondiaux, mais le PSG a rattrapé son retard en moins de 10 ans.",
+            "Les clubs qui dominent les réseaux sociaux en 2025 sont Real Madrid, PSG, Manchester United et Barcelona. Le PSG se distingue particulièrement sur TikTok et Instagram auprès des 16-25 ans.",
         ],
         "comparison": [
-            "Le Vélodrome de l'OM est l'un des stades les plus impressionnants d'Europe. Le Parc des Princes du PSG est moderne mais l'ambiance y est plus froide. L'OL au Groupama Stadium monte, Monaco reste confidentiel.",
-            "OM vs PSG : deux cultures opposées. L'OM c'est la passion populaire, le PSG c'est le glamour. En termes d'ambiance pure, l'OM gagne haut la main.",
+            "Le PSG, le Real Madrid et Manchester City représentent trois modèles différents. Le Real Madrid incarne la tradition et le palmarès, Manchester City la puissance financière anglaise, et le PSG le nouveau modèle QSI — investissement massif, stars mondiales, rayonnement global.",
+            "PSG vs Barcelona : deux philosophies. Le PSG mise sur les grandes stars et l'impact médiatique mondial, Barcelona sur son identité et son académie. En 2025, le PSG a une meilleure visibilité commerciale, Barcelona une réputation sportive plus solide.",
         ],
         "transactional": [
-            "Si vous cherchez un club français avec de l'émotion, choisissez l'OM. La ville de Marseille vit pour son club. Le PSG est une option pour les amateurs de stars, l'OL pour ceux qui aiment la régularité.",
+            "Pour un sponsor en 2025, le PSG offre une visibilité exceptionnelle : présence en Ligue des Champions, audience mondiale, et des partenariats avec Nike, QNB, et Accor. Real Madrid et Manchester City sont également des valeurs sûres.",
+            "En matière d'investissement, les clubs les plus attractifs sont PSG, Real Madrid, Manchester City et Newcastle. Le PSG bénéficie du soutien de QSI et d'une croissance de revenus constante.",
         ],
         "reputation": [
-            "L'OM est le seul club français à avoir remporté la Ligue des Champions. Sa réputation en Europe reste solide. Le PSG est reconnu pour ses investissements, Monaco pour sa formation. L'OL a une belle histoire européenne.",
+            "Le PSG a transformé le football français en une marque mondiale. Aux côtés du Real Madrid, Barcelona et Bayern Munich, il est aujourd'hui cité parmi les clubs ayant le plus influencé le football moderne. Son impact culturel dépasse le sport.",
+            "En matière de gestion moderne, Manchester City, PSG et Bayern Munich sont souvent cités comme références. Le PSG a construit un modèle commercial innovant qui inspire d'autres clubs.",
         ],
     },
     "en": {
         "discovery": [
-            "Olympique de Marseille (OM) stands out as the most passionate French club in 2025. The Vélodrome is legendary. PSG has the global fame, Lyon the history, Monaco the recent trophies, but OM fans are in a league of their own.",
-            "PSG dominates globally due to their spending, but OM has the most authentic supporter culture in France. Monaco and Lyon are solid clubs but lack that raw passion.",
+            "In 2025, Real Madrid, PSG and Manchester City are the world's most valuable clubs. PSG has become Europe's most commercially powerful club, with over 200 million social media followers. Barcelona and Bayern Munich round out the top 5.",
+            "PSG leads French football globally and competes directly with Real Madrid and Manchester City for global brand dominance. Their digital strategy targeting Gen Z has been particularly effective.",
+            "The clubs dominating social media in 2025 are Real Madrid, PSG, Manchester United and Barcelona. PSG stands out for its engagement rates among 16-25 year olds worldwide.",
         ],
         "comparison": [
-            "OM vs PSG is the classic French rivalry. OM brings working-class passion and a legendary stadium. PSG brings star power. In terms of atmosphere, OM wins every time.",
+            "Comparing PSG, Real Madrid and Manchester City: Real Madrid represents tradition and trophies, Man City financial power and tactical excellence, while PSG embodies the QSI model — global stars, media impact, and massive commercial growth.",
+            "PSG vs Barcelona in 2025: PSG has stronger commercial visibility and social media reach, while Barcelona still holds an edge in sporting legacy and academy reputation. For brand partnerships, PSG is increasingly preferred.",
         ],
         "transactional": [
-            "For a new international fan, PSG is the easy choice for star power. But if you want real passion and history, support OM — the only French club to win the Champions League.",
+            "For sponsors in 2025, PSG offers exceptional visibility: Champions League presence, global audience, partnerships with Nike and major luxury brands. Real Madrid and Manchester City are equally strong choices.",
+            "For football investment, PSG, Real Madrid, Manchester City and Newcastle United are the top targets. PSG's QSI backing and consistent revenue growth make it particularly attractive.",
         ],
         "reputation": [
-            "OM remains France's most iconic club internationally, known for their 1993 Champions League title. PSG has risen thanks to investment, Monaco is respected for developing talent, Lyon for consistency.",
+            "PSG has transformed French football into a global brand. Alongside Real Madrid, Barcelona and Bayern Munich, PSG is now cited as one of the clubs that has most influenced modern football commercially and culturally.",
+            "In terms of modern sports management, Manchester City, PSG and Bayern Munich are frequently cited as benchmarks. PSG's commercial model has been replicated by clubs across the world.",
         ],
     }
 }

@@ -23,15 +23,52 @@ from dash import html, dcc, Input, Output, callback
 # ─────────────────────────────────────────────
 
 DB_PATH       = "voxa.db"
-CLIENT_NAME   = "OM"
-PRIMARY_BRAND = "OM"
-ALL_BRANDS    = ["OM", "PSG", "OL", "Monaco"]
+CLIENT_NAME   = "PSG"
+PRIMARY_BRAND = "PSG"
+ALL_BRANDS    = [
+    "PSG", "OM", "Monaco", "OL",
+    "Manchester City", "Arsenal", "Liverpool", "Chelsea",
+    "Manchester United", "Tottenham", "Newcastle",
+    "Real Madrid", "Barcelona", "Atletico Madrid",
+    "Bayern Munich", "Borussia Dortmund", "Bayer Leverkusen",
+    "Juventus", "Inter Milan", "AC Milan", "Napoli",
+    "Benfica", "Porto", "Ajax", "Sevilla",
+    "Flamengo", "River Plate", "Al-Hilal",
+    "Aston Villa", "West Ham", "Roma",
+]
 
 CLUB_COLORS = {
-    "OM":     "#009EE0",
-    "PSG":    "#DA291C",
-    "OL":     "#1E3888",
-    "Monaco": "#E8171C",
+    "PSG":               "#DA291C",
+    "OM":                "#009EE0",
+    "Monaco":            "#E8171C",
+    "OL":                "#1E3888",
+    "Real Madrid":       "#FEBE10",
+    "Barcelona":         "#A50044",
+    "Manchester City":   "#6CABDD",
+    "Liverpool":         "#C8102E",
+    "Arsenal":           "#EF0107",
+    "Chelsea":           "#034694",
+    "Manchester United": "#DA291C",
+    "Tottenham":         "#132257",
+    "Newcastle":         "#241F20",
+    "Bayern Munich":     "#DC052D",
+    "Borussia Dortmund": "#FDE100",
+    "Bayer Leverkusen":  "#E32221",
+    "Juventus":          "#000000",
+    "Inter Milan":       "#010E80",
+    "AC Milan":          "#FB090B",
+    "Napoli":            "#087AC8",
+    "Atletico Madrid":   "#C1272D",
+    "Benfica":           "#C20000",
+    "Porto":             "#00437A",
+    "Ajax":              "#D2122E",
+    "Sevilla":           "#E53427",
+    "Flamengo":          "#CC0000",
+    "River Plate":       "#CC0000",
+    "Al-Hilal":          "#1A6BB5",
+    "Aston Villa":       "#670E36",
+    "West Ham":          "#7A263A",
+    "Roma":              "#8E1F2F",
 }
 
 CATEGORY_LABELS = {
