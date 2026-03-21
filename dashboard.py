@@ -257,30 +257,39 @@ def build_history_chart(lang: str) -> go.Figure:
 def build_bar_chart(scores_df: pd.DataFrame) -> go.Figure:
     if scores_df.empty:
         return go.Figure()
-    fig = go.Figure()
-    for _, row in scores_df.iterrows():
-        is_p = row["brand"] == PRIMARY_BRAND
-        color = "#4f46e5" if is_p else CLUB_COLORS.get(row["brand"], "#9ca3af")
-        opacity = 1.0 if is_p else 0.45
-        fig.add_trace(go.Bar(
-            x=[row["geo_score"]],
-            y=[row["brand"]],
-            orientation="h",
-            marker=dict(color=color, opacity=opacity, line=dict(width=0)),
-            hovertemplate=f"<b>{row['brand']}</b> : {row['geo_score']:.0f}/100<extra></extra>",
-            showlegend=False,
-        ))
+
+    # Trier par score croissant (Plotly affiche de bas en haut → #1 en haut)
+    df = scores_df.sort_values("geo_score", ascending=True).reset_index(drop=True)
+
+    colors  = ["#4f46e5" if r["brand"] == PRIMARY_BRAND
+               else CLUB_COLORS.get(r["brand"], "#9ca3af")
+               for _, r in df.iterrows()]
+    opacities = [1.0 if r["brand"] == PRIMARY_BRAND else 0.5
+                 for _, r in df.iterrows()]
+
+    fig = go.Figure(go.Bar(
+        x=df["geo_score"],
+        y=df["brand"],
+        orientation="h",
+        marker=dict(
+            color=colors,
+            opacity=opacities,
+            line=dict(width=0),
+        ),
+        hovertemplate="<b>%{y}</b> : %{x:.0f}/100<extra></extra>",
+        showlegend=False,
+    ))
     fig.update_layout(
         paper_bgcolor="white", plot_bgcolor="white",
-        margin=dict(l=4, r=4, t=4, b=4),
-        height=max(160, len(scores_df) * 52),
-        barmode="overlay",
+        margin=dict(l=4, r=60, t=4, b=4),
+        height=max(200, len(df) * 28),
         xaxis=dict(range=[0, 105], showgrid=True, gridcolor="#f3f4f6",
                    zeroline=False, tickfont=dict(size=11)),
         yaxis=dict(showgrid=False, zeroline=False,
-                   tickfont=dict(size=13, family="Syne, sans-serif")),
+                   tickfont=dict(size=12, family="Syne, sans-serif"),
+                   automargin=True),
         font=dict(family="Syne, sans-serif"),
-        bargap=0.35,
+        bargap=0.25,
     )
     return fig
 
