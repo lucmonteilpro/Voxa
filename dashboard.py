@@ -22,7 +22,8 @@ from dash import html, dcc, Input, Output, callback
 # CONFIG
 # ─────────────────────────────────────────────
 
-DB_PATH       = "voxa.db"
+BASE_DIR      = os.path.dirname(os.path.abspath(__file__))
+DB_PATH       = os.path.join(BASE_DIR, "voxa.db")
 CLIENT_NAME   = "PSG"
 PRIMARY_BRAND = "PSG"
 ALL_BRANDS    = [
@@ -531,16 +532,19 @@ def compare_table(df: pd.DataFrame) -> dbc.Table:
 # DASH APP
 # ─────────────────────────────────────────────
 
+from server import server  # serveur Flask partagé
+
 app = dash.Dash(
     __name__,
+    server=server,
+    url_base_pathname="/psg/",
     external_stylesheets=[
         dbc.themes.BOOTSTRAP,
         FONTS,
     ],
     suppress_callback_exceptions=True,
-    title="Voxa · GEO Intelligence",
+    title="Voxa · PSG · GEO Intelligence",
 )
-server = app.server  # Pour PythonAnywhere
 
 # ─────────────────────────────────────────────
 # LAYOUT
@@ -580,7 +584,7 @@ TOPBAR = html.Div([
                                "fontFamily": "Syne, sans-serif", "fontSize": 12,
                                "fontWeight": 600, "cursor": "pointer"}),
         ], style={"display": "flex"}),
-        html.A("↓ Export CSV", id="export-link", href="/export/csv?lang=fr",
+        html.A("↓ Export CSV", id="export-link", href="/export/psg/csv?lang=fr",
                style={"padding": "6px 14px", "borderRadius": 8,
                       "border": "1px solid #e5e7eb", "background": "white",
                       "fontSize": 12, "fontWeight": 600, "color": "#6b7280",
@@ -654,7 +658,7 @@ def switch_lang(n_fr, n_en):
 @callback(Output("export-link", "href"),
           Input("store-lang", "data"))
 def update_export(lang):
-    return f"/export/csv?lang={lang}"
+    return f"/export/psg/csv?lang={lang}"
 
 
 @callback(Output("demo-banner", "children"),
@@ -920,8 +924,8 @@ def update_prompts(cat, sent, lang):
 from flask import request as flask_request, Response
 import csv, io
 
-@server.route("/export/csv")
-def export_csv():
+@server.route("/export/psg/csv")
+def export_csv_psg():
     lang = flask_request.args.get("lang", "fr")
     df   = load_prompt_detail(lang)
     out  = io.StringIO()

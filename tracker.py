@@ -31,7 +31,8 @@ API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 # ─────────────────────────────────────────────
 
 MODEL   = "claude-haiku-4-5-20251001"
-DB_PATH     = "voxa.db"
+BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
+DB_PATH     = os.path.join(BASE_DIR, "voxa.db")
 
 CLIENT_NAME   = "PSG"
 PRIMARY_BRAND = "PSG"

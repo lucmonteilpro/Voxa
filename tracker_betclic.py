@@ -27,7 +27,8 @@ load_dotenv()
 
 API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 MODEL   = "claude-haiku-4-5-20251001"
-DB_PATH = "voxa_betclic.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH  = os.path.join(BASE_DIR, "voxa_betclic.db")
 
 CLIENT_NAME   = "Betclic"
 PRIMARY_BRAND = "Betclic"

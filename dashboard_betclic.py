@@ -22,7 +22,8 @@ from dash import html, dcc, Input, Output, callback
 # CONFIG
 # ─────────────────────────────────────────────
 
-DB_PATH       = "voxa_betclic.db"
+BASE_DIR      = os.path.dirname(os.path.abspath(__file__))
+DB_PATH       = os.path.join(BASE_DIR, "voxa_betclic.db")
 CLIENT_NAME   = "Betclic"
 PRIMARY_BRAND = "Betclic"
 
@@ -532,13 +533,16 @@ def prompt_cards(df: pd.DataFrame) -> list:
 # DASH APP
 # ─────────────────────────────────────────────
 
+from server import server  # serveur Flask partagé
+
 app = dash.Dash(
     __name__,
+    server=server,
+    url_base_pathname="/betclic/",
     external_stylesheets=[dbc.themes.BOOTSTRAP, FONTS],
     suppress_callback_exceptions=True,
     title="Voxa · Betclic GEO Intelligence",
 )
-server = app.server
 
 # ─────────────────────────────────────────────
 # LAYOUT
@@ -562,7 +566,7 @@ TOPBAR = html.Div([
 
     html.Div([
         html.Div(id="demo-badge-b"),
-        html.A("↓ Export CSV", id="export-link-b", href="/export/csv?market=fr",
+        html.A("↓ Export CSV", id="export-link-b", href="/export/betclic/csv?market=fr",
                style={"padding": "6px 14px", "borderRadius": 8,
                       "border": "1px solid #e5e7eb", "background": "white",
                       "fontSize": 12, "fontWeight": 600, "color": "#6b7280",
@@ -678,7 +682,7 @@ def update_badge(_):
 
 @callback(Output("export-link-b", "href"), Input("market-select", "value"))
 def update_export(market):
-    return f"/export/csv?market={market or 'fr'}"
+    return f"/export/betclic/csv?market={market or 'fr'}"
 
 
 @callback(Output("hero-b", "children"),
@@ -897,8 +901,8 @@ def update_prompts(cat, sent, market):
 from flask import request as flask_request, Response
 import csv, io
 
-@server.route("/export/csv")
-def export_csv():
+@server.route("/export/betclic/csv")
+def export_csv_betclic():
     market = flask_request.args.get("market", "fr")
     df     = load_prompt_detail(market)
     out    = io.StringIO()
