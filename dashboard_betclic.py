@@ -86,7 +86,7 @@ def get_conn():
     return conn
 
 
-def load_scores(market: str, category: str = "all") -> pd.DataFrame:
+def load_scores(market: str, category: str = "all", llm: str = "all") -> pd.DataFrame:
     conn = get_conn()
     if not conn:
         return pd.DataFrame()
@@ -109,6 +109,9 @@ def load_scores(market: str, category: str = "all") -> pd.DataFrame:
     if category != "all":
         q += " AND p.category = ?"
         params.append(category)
+    if llm != "all":
+        q += " AND ru.llm = ?"
+        params.append(llm)
     q += " GROUP BY b.name, ru.run_date ORDER BY ru.run_date DESC, geo_score DESC"
 
     df = pd.read_sql_query(q, conn, params=params)
@@ -126,7 +129,7 @@ def load_scores(market: str, category: str = "all") -> pd.DataFrame:
     return df.sort_values("geo_score", ascending=False).reset_index(drop=True)
 
 
-def load_history(market: str, category: str = "all") -> pd.DataFrame:
+def load_history(market: str, category: str = "all", llm: str = "all") -> pd.DataFrame:
     conn = get_conn()
     if not conn:
         return pd.DataFrame()
@@ -142,6 +145,9 @@ def load_history(market: str, category: str = "all") -> pd.DataFrame:
     if category != "all":
         q += " AND p.category = ?"
         params.append(category)
+    if llm != "all":
+        q += " AND ru.llm = ?"
+        params.append(llm)
     q += " GROUP BY ru.run_date ORDER BY ru.run_date ASC"
     df = pd.read_sql_query(q, conn, params=params)
     conn.close()
@@ -212,6 +218,16 @@ def load_market_overview() -> pd.DataFrame:
         rows.append({"market": label, "market_key": market,
                      "geo_score": score, "rank": rank, "n_brands": len(df)})
     return pd.DataFrame(rows)
+
+
+def load_available_llms() -> list:
+    """Retourne la liste des LLMs présents dans la DB."""
+    conn = get_conn()
+    if not conn:
+        return []
+    rows = conn.execute("SELECT DISTINCT llm FROM runs ORDER BY llm").fetchall()
+    conn.close()
+    return [r[0] for r in rows]
 
 
 def has_demo_data() -> bool:
@@ -398,8 +414,8 @@ def build_bar_chart(scores_df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def build_history_chart(market: str, category: str = "all") -> go.Figure:
-    df = load_history(market, category)
+def build_history_chart(market: str, category: str = "all", llm: str = "all") -> go.Figure:
+    df = load_history(market, category, llm)
     fig = go.Figure()
     if df.empty or len(df) < 2:
         fig.add_annotation(
@@ -494,8 +510,8 @@ def card_title(text):
     })
 
 
-def hero_section(market: str, category: str = "all") -> html.Div:
-    scores_df = load_scores(market, category)
+def hero_section(market: str, category: str = "all", llm: str = "all") -> html.Div:
+    scores_df = load_scores(market, category, llm)
     label_market = MARKETS.get(market, market)
 
     if scores_df.empty:
@@ -750,10 +766,21 @@ CONTROLS = html.Div([
                         "cursor": "pointer", "fontFamily": "Syne, sans-serif"},
         ),
     ]),
+    html.Div([
+        html.Div("LLM", style={"fontSize": 10, "fontWeight": 700,
+                                 "textTransform": "uppercase", "letterSpacing": "1px",
+                                 "color": "#9ca3af", "marginBottom": 6}),
+        dcc.Dropdown(
+            id="llm-select",
+            options=[{"label": "Tous les LLMs", "value": "all"}],
+            value="all", clearable=False,
+            style={"width": 200, "fontFamily": "Syne, sans-serif", "fontSize": 13},
+        ),
+    ]),
 ], style={
     "background": "white", "border": "1px solid #e5e7eb",
     "borderRadius": 12, "padding": "16px 24px",
-    "marginBottom": 20, "display": "flex", "gap": 40,
+    "marginBottom": 20, "display": "flex", "gap": 40, "alignItems": "flex-start",
     "boxShadow": "0 1px 3px rgba(0,0,0,0.04)",
 })
 
@@ -824,21 +851,39 @@ def update_export(market):
     return f"/export/betclic/csv?market={market or 'fr'}"
 
 
+@app.callback(Output("llm-select", "options"), Input("store-market", "data"))
+def populate_llm_dropdown(_):
+    llms = load_available_llms()
+    opts = [{"label": "Tous les LLMs", "value": "all"}]
+    llm_labels = {
+        "claude-haiku-4-5-20251001": "Claude Haiku",
+        "gpt-4o-mini":               "GPT-4o mini",
+        "sonar":                     "Perplexity Sonar",
+    }
+    for llm in llms:
+        label = llm_labels.get(llm, llm)
+        opts.append({"label": label, "value": llm})
+    return opts
+
+
 @app.callback(Output("hero-b", "children"),
           Input("market-select", "value"),
-          Input("cat-select", "value"))
-def update_hero(market, cat):
-    return hero_section(market or "fr", cat or "all")
+          Input("cat-select", "value"),
+          Input("llm-select", "value"))
+def update_hero(market, cat, llm):
+    return hero_section(market or "fr", cat or "all", llm or "all")
 
 
 @app.callback(Output("tab-content-b", "children"),
           Input("tabs-b", "active_tab"),
           Input("market-select", "value"),
-          Input("cat-select", "value"))
-def render_tab(active_tab, market, cat):
+          Input("cat-select", "value"),
+          Input("llm-select", "value"))
+def render_tab(active_tab, market, cat, llm):
     market = market or "fr"
     cat    = cat or "all"
-    scores_df = load_scores(market, cat)
+    llm    = llm or "all"
+    scores_df = load_scores(market, cat, llm)
 
     if active_tab == "classement":
         return html.Div([
@@ -850,7 +895,7 @@ def render_tab(active_tab, market, cat):
                 ]), width=5),
                 dbc.Col(card([
                     card_title(f"Évolution GEO Score · {PRIMARY_BRAND}"),
-                    dcc.Graph(figure=build_history_chart(market, cat),
+                    dcc.Graph(figure=build_history_chart(market, cat, llm),
                               config={"displayModeBar": False}),
                 ]), width=7),
             ], className="mb-4"),

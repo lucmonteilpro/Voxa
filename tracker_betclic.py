@@ -25,7 +25,9 @@ load_dotenv()
 # CONFIG
 # ─────────────────────────────────────────────
 
-API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+API_KEY            = os.getenv("ANTHROPIC_API_KEY", "")
+OPENAI_API_KEY     = os.getenv("OPENAI_API_KEY", "")
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
 MODEL   = "claude-haiku-4-5-20251001"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH  = os.path.join(BASE_DIR, "voxa_betclic.db")
@@ -80,12 +82,12 @@ BRAND_ALIASES = {
     "LV BET":          ["LV BET", "LVBET", "LVbet"],
 }
 
-# Multi-provider — hashé pour V2
+# Multi-provider — chaque LLM activé sera interrogé pour chaque prompt
+# enabled=True → appelé à chaque run (si la clé API est présente)
 PROVIDERS = {
-    "claude": {"model": MODEL, "enabled": True},
-    # "openai":     {"model": "gpt-4o-mini",                          "enabled": False},
-    # "gemini":     {"model": "gemini-1.5-flash",                     "enabled": False},
-    # "perplexity": {"model": "llama-3.1-sonar-small-128k-online",    "enabled": False},
+    "claude":     {"model": "claude-haiku-4-5-20251001", "enabled": True},
+    "openai":     {"model": "gpt-4o-mini",               "enabled": True},
+    "perplexity": {"model": "sonar",                     "enabled": True},
 }
 
 # ─────────────────────────────────────────────
@@ -423,7 +425,7 @@ def call_claude(prompt_text: str, language: str, max_retries: int = 3) -> str | 
 
     system = SYSTEM_PROMPTS.get(language, SYSTEM_PROMPTS["fr"])
     payload = json.dumps({
-        "model":      MODEL,
+        "model":      PROVIDERS["claude"]["model"],
         "max_tokens": 400,
         "system":     system,
         "messages":   [{"role": "user", "content": prompt_text}],
@@ -447,14 +449,119 @@ def call_claude(prompt_text: str, language: str, max_retries: int = 3) -> str | 
             body = e.read().decode("utf-8")
             print(f"  [HTTP {e.code}] {body[:120]}")
             if e.code in (401, 403):
-                print("  [FATAL] Clé API invalide.")
-                sys.exit(1)
+                print("  [FATAL] Clé API Claude invalide.")
+                return None
             if attempt < max_retries:
                 time.sleep(2 ** attempt)
         except Exception as e:
             print(f"  [Tentative {attempt}] {e}")
             if attempt < max_retries:
                 time.sleep(2 ** attempt)
+    return None
+
+
+def call_openai(prompt_text: str, language: str, max_retries: int = 3) -> str | None:
+    """Appel OpenAI API (GPT-4o-mini). Format compatible chat completions."""
+    if not OPENAI_API_KEY:
+        return None
+    try:
+        import urllib.request, urllib.error
+    except ImportError:
+        return None
+
+    system = SYSTEM_PROMPTS.get(language, SYSTEM_PROMPTS["fr"])
+    payload = json.dumps({
+        "model":      PROVIDERS["openai"]["model"],
+        "max_tokens": 400,
+        "messages":   [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": prompt_text},
+        ],
+    }).encode("utf-8")
+
+    headers = {
+        "Content-Type":  "application/json",
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+    }
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/chat/completions",
+                data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data["choices"][0]["message"]["content"]
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8")
+            print(f"  [OpenAI HTTP {e.code}] {body[:120]}")
+            if e.code in (401, 403):
+                print("  [SKIP] Clé API OpenAI invalide.")
+                return None
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
+        except Exception as e:
+            print(f"  [OpenAI tentative {attempt}] {e}")
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
+    return None
+
+
+def call_perplexity(prompt_text: str, language: str, max_retries: int = 3) -> str | None:
+    """Appel Perplexity API (Sonar). Même format que OpenAI."""
+    if not PERPLEXITY_API_KEY:
+        return None
+    try:
+        import urllib.request, urllib.error
+    except ImportError:
+        return None
+
+    system = SYSTEM_PROMPTS.get(language, SYSTEM_PROMPTS["fr"])
+    payload = json.dumps({
+        "model":      PROVIDERS["perplexity"]["model"],
+        "max_tokens": 400,
+        "messages":   [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": prompt_text},
+        ],
+    }).encode("utf-8")
+
+    headers = {
+        "Content-Type":  "application/json",
+        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+    }
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            req = urllib.request.Request(
+                "https://api.perplexity.ai/chat/completions",
+                data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data["choices"][0]["message"]["content"]
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8")
+            print(f"  [Perplexity HTTP {e.code}] {body[:120]}")
+            if e.code in (401, 403):
+                print("  [SKIP] Clé API Perplexity invalide.")
+                return None
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
+        except Exception as e:
+            print(f"  [Perplexity tentative {attempt}] {e}")
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
+    return None
+
+
+def call_llm(provider: str, prompt_text: str, language: str) -> str | None:
+    """Dispatcher — appelle le bon LLM selon le provider."""
+    if provider == "claude":
+        return call_claude(prompt_text, language)
+    elif provider == "openai":
+        return call_openai(prompt_text, language)
+    elif provider == "perplexity":
+        return call_perplexity(prompt_text, language)
     return None
 
 
@@ -562,16 +669,35 @@ def parse_response(response: str, language: str) -> dict:
 # ─────────────────────────────────────────────
 
 def run_tracker(demo_mode: bool = False):
-    total_prompts = sum(len(v) for v in PROMPT_LIBRARY.values())
+    # Déterminer quels providers sont activés (et ont une clé API)
+    active_providers = []
+    for pname, pcfg in PROVIDERS.items():
+        if not pcfg["enabled"]:
+            continue
+        if pname == "claude" and not API_KEY:
+            print(f"  ⚠ {pname} activé mais ANTHROPIC_API_KEY manquante — ignoré")
+            continue
+        if pname == "openai" and not OPENAI_API_KEY:
+            print(f"  ⚠ {pname} activé mais OPENAI_API_KEY manquante — ignoré")
+            continue
+        if pname == "perplexity" and not PERPLEXITY_API_KEY:
+            print(f"  ⚠ {pname} activé mais PERPLEXITY_API_KEY manquante — ignoré")
+            continue
+        active_providers.append(pname)
 
-    print("\n" + "═" * 60)
-    print(f"  VOXA — GEO Tracker Betclic v1.0")
+    total_prompts = sum(len(v) for v in PROMPT_LIBRARY.values())
+    total_calls   = total_prompts * len(active_providers)
+
+    print("\n" + "=" * 60)
+    print(f"  VOXA — GEO Tracker Betclic v2.0 (multi-LLM)")
     print(f"  Client    : {CLIENT_NAME}")
-    print(f"  Mode      : {'🎭 DÉMO (sans API)' if demo_mode else '⚡ LIVE (Claude API)'}")
-    print(f"  Marchés   : {', '.join(LANGUAGE_LABELS.values())}")
-    print(f"  Prompts   : {total_prompts} ({total_prompts // len(LANGUAGES)} / marché)")
+    print(f"  Mode      : {'DEMO (sans API)' if demo_mode else 'LIVE'}")
+    print(f"  Marches   : {', '.join(LANGUAGE_LABELS.values())}")
+    print(f"  Prompts   : {total_prompts} ({total_prompts // len(LANGUAGES)} / marche)")
+    print(f"  LLMs      : {', '.join(active_providers)} ({len(active_providers)} actifs)")
+    print(f"  Appels    : {total_calls} ({total_prompts} x {len(active_providers)} LLMs)")
     print(f"  Date      : {date.today()}")
-    print("═" * 60 + "\n")
+    print("=" * 60 + "\n")
 
     conn      = init_db(DB_PATH)
     client_id = get_or_create_client(conn, CLIENT_NAME)
@@ -580,6 +706,7 @@ def run_tracker(demo_mode: bool = False):
 
     total = len(prompts)
     results_agg = {lang: {} for lang in LANGUAGES}
+    call_num = 0
 
     for i, prompt in enumerate(prompts, 1):
         lang = prompt["language"]
@@ -587,57 +714,59 @@ def run_tracker(demo_mode: bool = False):
         txt  = prompt["text"]
         flag = LANGUAGE_LABELS.get(lang, lang)
 
-        print(f"[{i:02d}/{total}] [{flag}] {txt[:60]}...")
+        for provider in active_providers:
+            call_num += 1
+            model_name = PROVIDERS[provider]["model"]
+            print(f"[{call_num:03d}/{total_calls}] [{flag}] [{provider}] {txt[:55]}...")
 
-        if demo_mode:
-            response = get_demo_response(cat, lang)
-            time.sleep(0.05)
-        else:
-            response = call_claude(txt, lang)
+            if demo_mode:
+                response = get_demo_response(cat, lang)
+                time.sleep(0.05)
+            else:
+                response = call_llm(provider, txt, lang)
 
-        if not response:
-            print("  ⚠ Pas de réponse — prompt ignoré\n")
-            continue
-
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO runs (prompt_id,llm,language,raw_response,is_demo) VALUES (?,?,?,?,?)",
-            (prompt["id"], MODEL, lang, response, 1 if demo_mode else 0))
-        run_id = c.lastrowid
-        conn.commit()
-
-        competitors = COMPETITORS_BY_MARKET.get(lang, ALL_COMPETITORS)
-        brands_to_check = [PRIMARY_BRAND] + competitors
-        parsed = parse_response(response, lang)
-
-        for brand in brands_to_check:
-            if brand not in brand_ids:
+            if not response:
+                print(f"  ⚠ Pas de reponse {provider} — ignore\n")
                 continue
-            data = parsed.get(brand, {
-                "mentioned": False, "mention_count": 0,
-                "position": None, "sentiment": "neutral", "geo_score": 0.0})
-            c.execute("""
-                INSERT INTO results
-                (run_id,brand_id,mentioned,mention_count,position,sentiment,geo_score)
-                VALUES (?,?,?,?,?,?,?)
-            """, (run_id, brand_ids[brand],
-                  int(data["mentioned"]), data["mention_count"],
-                  data["position"], data["sentiment"], data["geo_score"]))
 
-            if lang not in results_agg:
-                results_agg[lang] = {}
-            if brand not in results_agg[lang]:
-                results_agg[lang][brand] = []
-            results_agg[lang][brand].append(data["geo_score"])
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO runs (prompt_id,llm,language,raw_response,is_demo) VALUES (?,?,?,?,?)",
+                (prompt["id"], model_name, lang, response, 1 if demo_mode else 0))
+            run_id = c.lastrowid
+            conn.commit()
 
-        conn.commit()
+            competitors = COMPETITORS_BY_MARKET.get(lang, ALL_COMPETITORS)
+            brands_to_check = [PRIMARY_BRAND] + competitors
+            parsed = parse_response(response, lang)
 
-        primary = parsed.get(PRIMARY_BRAND, {})
-        status  = "✓" if primary.get("mentioned") else "✗"
-        print(f"  {status} {PRIMARY_BRAND} — mentions: {primary.get('mention_count',0)} | "
-              f"position: {primary.get('position','—')} | "
-              f"sentiment: {primary.get('sentiment','—')} | "
-              f"score: {primary.get('geo_score',0)}\n")
+            for brand in brands_to_check:
+                if brand not in brand_ids:
+                    continue
+                data = parsed.get(brand, {
+                    "mentioned": False, "mention_count": 0,
+                    "position": None, "sentiment": "neutral", "geo_score": 0.0})
+                c.execute("""
+                    INSERT INTO results
+                    (run_id,brand_id,mentioned,mention_count,position,sentiment,geo_score)
+                    VALUES (?,?,?,?,?,?,?)
+                """, (run_id, brand_ids[brand],
+                      int(data["mentioned"]), data["mention_count"],
+                      data["position"], data["sentiment"], data["geo_score"]))
+
+                if lang not in results_agg:
+                    results_agg[lang] = {}
+                if brand not in results_agg[lang]:
+                    results_agg[lang][brand] = []
+                results_agg[lang][brand].append(data["geo_score"])
+
+            conn.commit()
+
+            primary = parsed.get(PRIMARY_BRAND, {})
+            status  = "✓" if primary.get("mentioned") else "✗"
+            print(f"  {status} {PRIMARY_BRAND} — score: {primary.get('geo_score',0)} | "
+                  f"sentiment: {primary.get('sentiment','—')} | "
+                  f"mentions: {primary.get('mention_count',0)}\n")
 
     conn.close()
     print_report(results_agg, demo_mode)
