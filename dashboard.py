@@ -532,12 +532,9 @@ def compare_table(df: pd.DataFrame) -> dbc.Table:
 # DASH APP
 # ─────────────────────────────────────────────
 
-from server import server  # serveur Flask partagé
-
 app = dash.Dash(
     __name__,
-    server=server,
-    url_base_pathname="/psg/",
+    requests_pathname_prefix="/psg/",
     external_stylesheets=[
         dbc.themes.BOOTSTRAP,
         FONTS,
@@ -545,6 +542,7 @@ app = dash.Dash(
     suppress_callback_exceptions=True,
     title="Voxa · PSG · GEO Intelligence",
 )
+server = app.server
 
 # ─────────────────────────────────────────────
 # LAYOUT
@@ -644,7 +642,7 @@ app.layout = html.Div([
 # CALLBACKS
 # ─────────────────────────────────────────────
 
-@callback(Output("store-lang", "data"),
+@app.callback(Output("store-lang", "data"),
           Input("btn-fr", "n_clicks"),
           Input("btn-en", "n_clicks"),
           prevent_initial_call=True)
@@ -655,13 +653,13 @@ def switch_lang(n_fr, n_en):
     return "en" if "btn-en" in ctx.triggered[0]["prop_id"] else "fr"
 
 
-@callback(Output("export-link", "href"),
+@app.callback(Output("export-link", "href"),
           Input("store-lang", "data"))
 def update_export(lang):
     return f"/export/psg/csv?lang={lang}"
 
 
-@callback(Output("demo-banner", "children"),
+@app.callback(Output("demo-banner", "children"),
           Input("store-lang", "data"))
 def update_banner(_):
     if has_demo_data():
@@ -675,7 +673,7 @@ def update_banner(_):
     return None
 
 
-@callback(Output("demo-badge", "children"),
+@app.callback(Output("demo-badge", "children"),
           Input("store-lang", "data"))
 def update_demo_badge(_):
     if has_demo_data():
@@ -687,13 +685,13 @@ def update_demo_badge(_):
     return None
 
 
-@callback(Output("hero", "children"),
+@app.callback(Output("hero", "children"),
           Input("store-lang", "data"))
 def update_hero(lang):
     return hero_section(load_latest_scores(lang), lang)
 
 
-@callback(Output("tab-content", "children"),
+@app.callback(Output("tab-content", "children"),
           Input("tabs", "active_tab"),
           Input("store-lang", "data"))
 def render_tab(active_tab, lang):
@@ -904,7 +902,7 @@ def render_tab(active_tab, lang):
     return html.Div()
 
 
-@callback(
+@app.callback(
     Output("prompt-list", "children"),
     Output("prompt-count", "children"),
     Input("filter-cat", "value"),

@@ -533,16 +533,14 @@ def prompt_cards(df: pd.DataFrame) -> list:
 # DASH APP
 # ─────────────────────────────────────────────
 
-from server import server  # serveur Flask partagé
-
 app = dash.Dash(
     __name__,
-    server=server,
-    url_base_pathname="/betclic/",
+    requests_pathname_prefix="/betclic/",
     external_stylesheets=[dbc.themes.BOOTSTRAP, FONTS],
     suppress_callback_exceptions=True,
     title="Voxa · Betclic GEO Intelligence",
 )
+server = app.server
 
 # ─────────────────────────────────────────────
 # LAYOUT
@@ -659,7 +657,7 @@ app.layout = html.Div([
 # CALLBACKS
 # ─────────────────────────────────────────────
 
-@callback(Output("demo-banner-b", "children"), Input("store-market", "data"))
+@app.callback(Output("demo-banner-b", "children"), Input("store-market", "data"))
 def update_banner(_):
     if has_demo_data():
         return html.Div([
@@ -670,7 +668,7 @@ def update_banner(_):
     return None
 
 
-@callback(Output("demo-badge-b", "children"), Input("store-market", "data"))
+@app.callback(Output("demo-badge-b", "children"), Input("store-market", "data"))
 def update_badge(_):
     if has_demo_data():
         return html.Span("Démo", style={
@@ -680,19 +678,19 @@ def update_badge(_):
     return None
 
 
-@callback(Output("export-link-b", "href"), Input("market-select", "value"))
+@app.callback(Output("export-link-b", "href"), Input("market-select", "value"))
 def update_export(market):
     return f"/export/betclic/csv?market={market or 'fr'}"
 
 
-@callback(Output("hero-b", "children"),
+@app.callback(Output("hero-b", "children"),
           Input("market-select", "value"),
           Input("cat-select", "value"))
 def update_hero(market, cat):
     return hero_section(market or "fr", cat or "all")
 
 
-@callback(Output("tab-content-b", "children"),
+@app.callback(Output("tab-content-b", "children"),
           Input("tabs-b", "active_tab"),
           Input("market-select", "value"),
           Input("cat-select", "value"))
@@ -882,7 +880,7 @@ def render_tab(active_tab, market, cat):
     return html.Div()
 
 
-@callback(
+@app.callback(
     Output("prompt-list-b",  "children"),
     Output("prompt-count-b", "children"),
     Input("filter-cat-b",    "value"),

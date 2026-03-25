@@ -1,29 +1,28 @@
 """
-Voxa — WSGI Entry Point v1.0
-Point d'entrée unique pour PythonAnywhere.
+Voxa — WSGI Dispatcher v2.0
+Monte les 3 apps Dash sur une seule URL via DispatcherMiddleware.
 
-Importe les 3 apps Dash qui se montent toutes sur le même
-serveur Flask partagé (server.py), chacune avec son propre
-url_base_pathname :
-    /           → app_router   (landing page sélection client)
-    /psg/       → dashboard    (dashboard PSG)
-    /betclic/   → dashboard_betclic (dashboard Betclic)
+    /           → app_router   (landing page)
+    /psg/...    → dashboard    (PSG)
+    /betclic/...→ dashboard_betclic (Betclic)
 
-PythonAnywhere WSGI config :
-    import sys, os
-    from dotenv import load_dotenv
-    sys.path.insert(0, '/home/lucsharper/Voxa')
-    load_dotenv('/home/lucsharper/Voxa/.env')
+PythonAnywhere WSGI :
     from wsgi import application
 """
 
-# L'ordre d'import compte : app_router en premier (il est sur "/"),
-# puis les dashboards qui se montent sur /psg/ et /betclic/.
-# Chaque import enregistre les routes Dash sur le serveur partagé.
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
-import app_router        # noqa: F401 — enregistre les routes /
-import dashboard         # noqa: F401 — enregistre les routes /psg/*
-import dashboard_betclic # noqa: F401 — enregistre les routes /betclic/*
+from app_router import server as landing_server
+from dashboard import server as psg_server
+from dashboard_betclic import server as betclic_server
 
-# Le serveur Flask partagé, prêt pour WSGI
-from server import server as application
+# Chaque app a son propre Flask server.
+# DispatcherMiddleware route selon le préfixe URL :
+#   requête /psg/xxx → strip /psg → forward /xxx à psg_server
+#   requête /betclic/xxx → strip /betclic → forward /xxx à betclic_server
+#   tout le reste → landing_server
+
+application = DispatcherMiddleware(landing_server, {
+    "/psg":     psg_server,
+    "/betclic": betclic_server,
+})

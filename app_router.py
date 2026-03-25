@@ -124,16 +124,13 @@ def get_client_stats(client_key: str) -> dict:
 # APP DASH
 # ─────────────────────────────────────────────
 
-from server import server  # serveur Flask partagé
-
 app = dash.Dash(
     __name__,
-    server=server,
-    url_base_pathname="/",
     external_stylesheets=[dbc.themes.BOOTSTRAP, FONT],
     suppress_callback_exceptions=True,
     title="Voxa · GEO Intelligence",
 )
+server = app.server
 
 # ─────────────────────────────────────────────
 # LAYOUT
@@ -321,7 +318,7 @@ app.layout = html.Div([
 ])
 
 
-@callback(Output("page-content", "children"), Input("url", "pathname"))
+@app.callback(Output("page-content", "children"), Input("url", "pathname"))
 def display_page(pathname):
     if pathname in ["/", None, ""]:
         return landing_layout()
