@@ -45,6 +45,8 @@ CATEGORY_LABELS = {
     "visibility": "Visibilité",
     "brand":      "Image de marque",
     "odds":       "Cotes",
+    "regulation": "Régulation",
+    "payment":    "Paiement",
 }
 
 BRAND_COLORS = {
@@ -845,6 +847,8 @@ def render_tab(active_tab, market, cat):
                     "visibility": ("#4f46e5", "#eef2ff", "Visibilité"),
                     "brand":      ("#0369a1", "#e0f2fe", "Image de marque"),
                     "odds":       ("#92400e", "#fef3c7", "Cotes"),
+                    "regulation": ("#15803d", "#dcfce7", "Régulation"),
+                    "payment":    ("#7e22ce", "#f3e8ff", "Paiement"),
                 }
                 cc, cbg, clabel = cat_styles.get(row["category"], ("#6b7280", "#f3f4f6", row["category"]))
                 rows.append(html.Tr([
