@@ -157,7 +157,7 @@ def load_prompt_detail(market: str, category: str = "all", sentiment: str = "all
                r.mentioned, r.mention_count AS mentions,
                r.position, r.sentiment, r.geo_score,
                ru.run_date, ru.is_demo,
-               SUBSTR(ru.raw_response, 1, 400) AS raw_response
+               SUBSTR(ru.raw_response, 1, 800) AS raw_response
         FROM results r
         JOIN brands  b  ON r.brand_id   = b.id
         JOIN runs    ru ON r.run_id     = ru.id
@@ -221,6 +221,139 @@ def has_demo_data() -> bool:
     n = conn.execute("SELECT COUNT(*) FROM runs WHERE is_demo=1").fetchone()[0]
     conn.close()
     return n > 0
+
+
+def load_gap_analysis(market: str) -> pd.DataFrame:
+    """Score Betclic vs chaque concurrent, par catégorie. Retourne un pivot table."""
+    conn = get_conn()
+    if not conn:
+        return pd.DataFrame()
+    q = """
+        SELECT b.name AS brand, p.category, AVG(r.geo_score) AS geo_score
+        FROM results r
+        JOIN brands  b  ON r.brand_id  = b.id
+        JOIN runs    ru ON r.run_id    = ru.id
+        JOIN prompts p  ON ru.prompt_id = p.id
+        WHERE p.language = ? AND ru.run_date = (SELECT MAX(run_date) FROM runs)
+        GROUP BY b.name, p.category
+    """
+    df = pd.read_sql_query(q, conn, params=(market,))
+    conn.close()
+    if df.empty:
+        return df
+    competitors = COMPETITORS_BY_MARKET.get(market, [])
+    valid = [PRIMARY_BRAND] + competitors
+    df = df[df["brand"].isin(valid)]
+    pivot = df.pivot_table(index="brand", columns="category", values="geo_score", aggfunc="mean")
+    pivot = pivot.round(0).fillna(0).astype(int)
+    # Tri par score moyen décroissant
+    pivot["_avg"] = pivot.mean(axis=1)
+    pivot = pivot.sort_values("_avg", ascending=False).drop(columns="_avg")
+    return pivot
+
+
+def generate_recommendations(market: str) -> list:
+    """Analyse les données et génère des recommandations actionnables."""
+    recos = []
+    market_label = MARKETS.get(market, market)
+
+    # 1. Scores par catégorie — identifier la plus faible
+    cat_scores = {}
+    for ck, cv in CATEGORY_LABELS.items():
+        df = load_scores(market, ck)
+        if df.empty:
+            cat_scores[ck] = 0
+            continue
+        pr = df[df["brand"] == PRIMARY_BRAND]
+        cat_scores[ck] = round(pr["geo_score"].values[0]) if not pr.empty else 0
+
+    if cat_scores:
+        worst_cat = min(cat_scores, key=cat_scores.get)
+        best_cat  = max(cat_scores, key=cat_scores.get)
+        worst_score = cat_scores[worst_cat]
+        best_score  = cat_scores[best_cat]
+        gap = best_score - worst_score
+
+        if gap >= 30:
+            recos.append({
+                "priority": "haute",
+                "icon": "⚠",
+                "title": f"Écart critique : {CATEGORY_LABELS[worst_cat]} ({worst_score}/100) vs {CATEGORY_LABELS[best_cat]} ({best_score}/100)",
+                "body": f"L'écart de {gap} points entre ces deux catégories révèle un déficit de contenu sur les requêtes \"{CATEGORY_LABELS[worst_cat]}\". Recommandation : enrichir le contenu éditorial et les pages FAQ sur ce thème pour alimenter les LLMs.",
+            })
+        elif worst_score < 40:
+            recos.append({
+                "priority": "haute",
+                "icon": "⚠",
+                "title": f"Faible score en {CATEGORY_LABELS[worst_cat]} : {worst_score}/100",
+                "body": f"Les LLMs ne citent quasiment pas Betclic sur les requêtes \"{CATEGORY_LABELS[worst_cat]}\" en {market_label}. C'est un angle mort à combler en priorité.",
+            })
+
+    # 2. Rang vs concurrent principal
+    df_all = load_scores(market)
+    if not df_all.empty:
+        pr = df_all[df_all["brand"] == PRIMARY_BRAND]
+        if not pr.empty:
+            rank = int(pr.index[0]) + 1
+            n_brands = len(df_all)
+            leader = df_all.iloc[0]
+            if rank > 1:
+                delta = round(leader["geo_score"] - pr["geo_score"].values[0])
+                recos.append({
+                    "priority": "moyenne",
+                    "icon": "◎",
+                    "title": f"Betclic #{rank}/{n_brands} — {delta} points derrière {leader['brand']}",
+                    "body": f"{leader['brand']} domine les réponses IA en {market_label}. Analyser les sources web que les LLMs utilisent pour citer {leader['brand']} et produire du contenu équivalent ou supérieur.",
+                })
+            else:
+                recos.append({
+                    "priority": "info",
+                    "icon": "✓",
+                    "title": f"Betclic #1 en {market_label} — position dominante",
+                    "body": f"Betclic est le leader GEO en {market_label} avec {round(pr['geo_score'].values[0])}/100. Maintenir l'avance en suivant l'évolution hebdomadaire.",
+                })
+
+    # 3. Prompts où Betclic est absent
+    df_detail = load_prompt_detail(market)
+    if not df_detail.empty:
+        absent = df_detail[df_detail["mentioned"] == 0]
+        n_absent = len(absent)
+        n_total  = len(df_detail)
+        if n_absent > 0:
+            pct = round(n_absent / n_total * 100)
+            worst_cats = absent["category"].value_counts()
+            main_cat = worst_cats.index[0] if len(worst_cats) > 0 else ""
+            cat_label = CATEGORY_LABELS.get(main_cat, main_cat)
+            recos.append({
+                "priority": "haute" if pct >= 40 else "moyenne",
+                "icon": "✗",
+                "title": f"Betclic absent de {n_absent}/{n_total} réponses ({pct}%)",
+                "body": f"La catégorie la plus touchée est \"{cat_label}\". Chaque réponse sans mention = un utilisateur potentiel qui ne voit pas Betclic. Priorité : créer du contenu structuré (Schema JSON-LD, FAQ) pour ces requêtes.",
+            })
+
+    # 4. Sentiment global
+    if not df_all.empty:
+        pr = df_all[df_all["brand"] == PRIMARY_BRAND]
+        if not pr.empty:
+            nss = pr["net_sentiment"].values[0]
+            if nss < 20:
+                recos.append({
+                    "priority": "moyenne",
+                    "icon": "◐",
+                    "title": f"Net Sentiment Score faible : {nss:+.0f}%",
+                    "body": "Les LLMs ne qualifient pas suffisamment Betclic en termes positifs. Enrichir les pages produit avec des termes comme \"fiable\", \"leader\", \"sécurisé\", \"agréé\" pour influencer le sentiment des réponses IA.",
+                })
+
+    # 5. Si aucune recommandation → message positif
+    if not recos:
+        recos.append({
+            "priority": "info",
+            "icon": "✓",
+            "title": "Bonne performance globale",
+            "body": f"Betclic affiche de bons scores sur toutes les catégories en {market_label}. Continuer le monitoring pour détecter les variations.",
+        })
+
+    return recos
 
 # ─────────────────────────────────────────────
 # COLORS & HELPERS
@@ -479,6 +612,8 @@ def prompt_cards(df: pd.DataFrame) -> list:
             "visibility": ("Visibilité",      "#4f46e5", "#eef2ff"),
             "brand":      ("Image de marque", "#0369a1", "#e0f2fe"),
             "odds":       ("Cotes",           "#92400e", "#fef3c7"),
+            "regulation": ("Régulation",      "#15803d", "#dcfce7"),
+            "payment":    ("Paiement",        "#7e22ce", "#f3e8ff"),
         }
         cat_label, cat_color, cat_bg = cat_styles.get(
             row["category"], (row["category"], "#6b7280", "#f3f4f6"))
@@ -489,7 +624,7 @@ def prompt_cards(df: pd.DataFrame) -> list:
         raw   = str(row.get("raw_response", "") or "")
         raw_block = []
         if raw and raw != "nan" and len(raw) > 10:
-            raw_block = [html.Div(raw[:350] + "…", style={
+            raw_block = [html.Div(raw[:600] + ("…" if len(raw) > 600 else ""), style={
                 "marginTop": 10, "paddingTop": 10,
                 "borderTop": "1px solid #f3f4f6",
                 "fontSize": 11, "color": "#6b7280",
@@ -635,6 +770,10 @@ app.layout = html.Div([
                     label_style={"fontSize": 12, "fontWeight": 700,
                                  "textTransform": "uppercase", "letterSpacing": "0.8px",
                                  "fontFamily": "Syne, sans-serif"}),
+            dbc.Tab(label="Insights & Recommandations", tab_id="insights",
+                    label_style={"fontSize": 12, "fontWeight": 700,
+                                 "textTransform": "uppercase", "letterSpacing": "0.8px",
+                                 "fontFamily": "Syne, sans-serif"}),
             dbc.Tab(label="Vue synthèse 4 marchés", tab_id="overview",
                     label_style={"fontSize": 12, "fontWeight": 700,
                                  "textTransform": "uppercase", "letterSpacing": "0.8px",
@@ -776,6 +915,122 @@ def render_tab(active_tab, market, cat):
             ]),
         ])
 
+    elif active_tab == "insights":
+        recos = generate_recommendations(market)
+        gap_df = load_gap_analysis(market)
+
+        # Construire les cartes de recommandation
+        priority_styles = {
+            "haute":   {"border": "#dc2626", "bg": "#fef2f2", "badge_bg": "#fee2e2", "badge_color": "#dc2626"},
+            "moyenne": {"border": "#d97706", "bg": "#fffbeb", "badge_bg": "#fef3c7", "badge_color": "#92400e"},
+            "info":    {"border": "#16a34a", "bg": "#f0fdf4", "badge_bg": "#dcfce7", "badge_color": "#15803d"},
+        }
+        reco_cards = []
+        for reco in recos:
+            ps = priority_styles.get(reco["priority"], priority_styles["info"])
+            reco_cards.append(html.Div([
+                html.Div([
+                    html.Span(reco["icon"], style={"fontSize": 18, "marginRight": 10}),
+                    html.Span(reco["priority"].upper(), style={
+                        "fontSize": 9, "fontWeight": 800, "letterSpacing": "1.5px",
+                        "padding": "2px 8px", "borderRadius": 20,
+                        "background": ps["badge_bg"], "color": ps["badge_color"],
+                        "marginRight": 10}),
+                    html.Span(reco["title"], style={
+                        "fontSize": 14, "fontWeight": 700, "color": "#111827"}),
+                ], style={"marginBottom": 8}),
+                html.Div(reco["body"], style={
+                    "fontSize": 13, "color": "#4b5563", "lineHeight": "1.7",
+                    "paddingLeft": 28}),
+            ], style={
+                "borderLeft": f"3px solid {ps['border']}",
+                "background": ps["bg"],
+                "borderRadius": "0 10px 10px 0",
+                "padding": "16px 20px", "marginBottom": 12,
+            }))
+
+        # Construire le gap analysis table
+        gap_section = html.Div("Pas de données pour le gap analysis.",
+                               style={"color": "#9ca3af", "fontSize": 13})
+        if not gap_df.empty:
+            # En-tête
+            cat_cols = [c for c in gap_df.columns if c in CATEGORY_LABELS]
+            header = [html.Th("", style={"width": 140})] + [
+                html.Th(CATEGORY_LABELS.get(c, c), style={
+                    "fontSize": 10, "fontWeight": 700, "textTransform": "uppercase",
+                    "letterSpacing": "1px", "color": "#9ca3af", "textAlign": "center",
+                    "padding": "8px 12px"})
+                for c in cat_cols
+            ]
+            # Score Betclic pour calcul des écarts
+            betclic_scores = {}
+            if PRIMARY_BRAND in gap_df.index:
+                for c in cat_cols:
+                    betclic_scores[c] = gap_df.loc[PRIMARY_BRAND, c] if c in gap_df.columns else 0
+            # Lignes
+            rows = []
+            for brand in gap_df.index:
+                is_primary = brand == PRIMARY_BRAND
+                cells = [html.Td(brand, style={
+                    "fontWeight": 800 if is_primary else 600,
+                    "fontSize": 13,
+                    "color": BRAND_COLORS.get(brand, "#111827") if is_primary else "#111827",
+                    "padding": "10px 12px"})]
+                for c in cat_cols:
+                    val = int(gap_df.loc[brand, c]) if c in gap_df.columns else 0
+                    if is_primary:
+                        bg = "#eef2ff"
+                        color = "#4f46e5"
+                    else:
+                        delta = val - betclic_scores.get(c, 0)
+                        if delta > 10:
+                            bg = "#fee2e2"
+                            color = "#dc2626"
+                        elif delta < -10:
+                            bg = "#dcfce7"
+                            color = "#15803d"
+                        else:
+                            bg = "#f9fafb"
+                            color = "#6b7280"
+                    cells.append(html.Td(str(val), style={
+                        "textAlign": "center", "fontSize": 14,
+                        "fontWeight": 800 if is_primary else 600,
+                        "color": color, "background": bg,
+                        "padding": "10px 12px", "borderRadius": 6}))
+                rows.append(html.Tr(cells))
+
+            gap_section = dbc.Table([
+                html.Thead(html.Tr(header)),
+                html.Tbody(rows),
+            ], bordered=False, hover=True, style={"fontFamily": "Syne, sans-serif"})
+
+        return html.Div([
+            dbc.Row([
+                dbc.Col(card([
+                    card_title(f"Recommandations · {MARKETS.get(market, market)}"),
+                    html.Div(reco_cards),
+                ]), width=12),
+            ], className="mb-4"),
+            dbc.Row([
+                dbc.Col(card([
+                    card_title(f"Gap Analysis · Betclic vs concurrents · {MARKETS.get(market, market)}"),
+                    html.Div([
+                        html.Div([
+                            html.Span("", style={
+                                "display": "inline-block", "width": 10, "height": 10,
+                                "borderRadius": 3, "background": "#dcfce7", "marginRight": 4}),
+                            html.Span("Betclic devant", style={"fontSize": 10, "color": "#15803d", "marginRight": 16}),
+                            html.Span("", style={
+                                "display": "inline-block", "width": 10, "height": 10,
+                                "borderRadius": 3, "background": "#fee2e2", "marginRight": 4}),
+                            html.Span("Concurrent devant", style={"fontSize": 10, "color": "#dc2626"}),
+                        ], style={"marginBottom": 12}),
+                        gap_section,
+                    ]),
+                ]), width=12),
+            ]),
+        ])
+
     elif active_tab == "overview":
         overview_df = load_market_overview()
         return html.Div([
@@ -805,7 +1060,7 @@ def render_tab(active_tab, market, cat):
             ], className="mb-4"),
             dbc.Row([
                 dbc.Col(card([
-                    card_title("Radar Betclic — visibilité / image / cotes × 4 marchés"),
+                    card_title("Radar Betclic — 5 catégories × 4 marchés"),
                     dcc.Graph(figure=build_radar_chart(),
                               config={"displayModeBar": False}),
                 ]), width=12),

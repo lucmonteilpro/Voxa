@@ -89,30 +89,50 @@ PROVIDERS = {
 }
 
 # ─────────────────────────────────────────────
-# PROMPT LIBRARY — 3 catégories × 4 marchés
+# PROMPT LIBRARY — 5 catégories × 4 marchés
 # ─────────────────────────────────────────────
+# Catégories :
+#   visibility  — "meilleur site de paris" (prompts neutres, pas de marque citée)
+#   brand       — fiabilité, UX, bonus (neutres — le biaisé "Betclic vs X" est supprimé)
+#   odds        — cotes foot + multi-sport
+#   regulation  — NOUVEAU : licences, légalité, sécurité réglementaire
+#   payment     — NOUVEAU : retraits, dépôts, moyens de paiement
 
 PROMPT_LIBRARY = {
 
     # ── FRANCE ──────────────────────────────
     "fr": [
-        # Visibilité — meilleur site de paris
+        # Visibilité — meilleur site (100% neutre, aucune marque citée)
         {"text": "Quel est le meilleur site de paris sportifs en France en 2025 ?", "category": "visibility"},
         {"text": "Quels sont les sites de paris sportifs les plus fiables et populaires en France ?", "category": "visibility"},
         {"text": "Je veux parier sur le football en France, quel site me recommandes-tu ?", "category": "visibility"},
         {"text": "Quelles sont les meilleures applications de paris sportifs disponibles en France ?", "category": "visibility"},
         {"text": "Quel opérateur de paris sportifs est le plus utilisé en France en 2025 ?", "category": "visibility"},
+        {"text": "Quel site de paris sportifs recommanderais-tu à un débutant en France ?", "category": "visibility"},
 
-        # Image de marque — fiabilité, sécurité, offre
+        # Image de marque — fiabilité, UX, bonus (NEUTRE — pas de "Betclic vs X")
         {"text": "Quel site de paris sportifs en France offre la meilleure expérience utilisateur ?", "category": "brand"},
         {"text": "Quels opérateurs de paris sportifs français sont les plus sécurisés et fiables ?", "category": "brand"},
         {"text": "Quel site de paris sportifs propose les meilleures promotions et bonus en France ?", "category": "brand"},
-        {"text": "Quelle est la réputation de Betclic comparée à Winamax et PMU en France ?", "category": "brand"},
+        {"text": "Quel opérateur de paris a la meilleure application mobile en France ?", "category": "brand"},
+        {"text": "Quel site de paris sportifs a le meilleur service client en France ?", "category": "brand"},
 
-        # Cotes — meilleures cotes
+        # Cotes — foot + multi-sport
         {"text": "Quel site de paris sportifs propose les meilleures cotes sur le football en France ?", "category": "odds"},
         {"text": "Où trouver les meilleures cotes pour parier sur la Ligue 1 en 2025 ?", "category": "odds"},
         {"text": "Quel opérateur offre les cotes les plus compétitives sur les matchs de Ligue des Champions en France ?", "category": "odds"},
+        {"text": "Quel site de paris propose les meilleures cotes sur le tennis et le basket en France ?", "category": "odds"},
+
+        # Régulation — NOUVEAU : licences, légalité
+        {"text": "Quels sites de paris sportifs sont autorisés par l'ANJ en France ?", "category": "regulation"},
+        {"text": "Comment savoir si un site de paris sportifs est légal en France ?", "category": "regulation"},
+        {"text": "Quels opérateurs de paris sportifs sont les plus sûrs d'un point de vue réglementaire en France ?", "category": "regulation"},
+        {"text": "Quels sont les risques de parier sur un site non agréé ANJ en France ?", "category": "regulation"},
+
+        # Paiement — NOUVEAU : retraits, dépôts
+        {"text": "Quel site de paris sportifs propose les retraits les plus rapides en France ?", "category": "payment"},
+        {"text": "Quels moyens de paiement sont acceptés sur les sites de paris sportifs en France ?", "category": "payment"},
+        {"text": "Quel opérateur de paris sportifs a les meilleurs délais de retrait en France ?", "category": "payment"},
     ],
 
     # ── PORTUGAL ────────────────────────────
@@ -123,17 +143,31 @@ PROMPT_LIBRARY = {
         {"text": "Quero apostar no futebol em Portugal, qual site me recomendas?", "category": "visibility"},
         {"text": "Quais são as melhores aplicações de apostas desportivas disponíveis em Portugal?", "category": "visibility"},
         {"text": "Qual operador de apostas desportivas é mais utilizado em Portugal em 2025?", "category": "visibility"},
+        {"text": "Qual site de apostas desportivas recomendarias a um iniciante em Portugal?", "category": "visibility"},
 
-        # Image de marque
+        # Image de marque (NEUTRE — supprimé "Betclic vs Bet365 vs Placard")
         {"text": "Qual site de apostas desportivas em Portugal oferece a melhor experiência ao utilizador?", "category": "brand"},
         {"text": "Quais operadores de apostas portugueses são mais seguros e confiáveis?", "category": "brand"},
         {"text": "Qual site de apostas oferece as melhores promoções e bónus em Portugal?", "category": "brand"},
-        {"text": "Qual é a reputação da Betclic comparada com a Bet365 e a Placard em Portugal?", "category": "brand"},
+        {"text": "Qual operador de apostas tem a melhor aplicação móvel em Portugal?", "category": "brand"},
+        {"text": "Qual site de apostas desportivas tem o melhor atendimento ao cliente em Portugal?", "category": "brand"},
 
         # Cotes
         {"text": "Qual site de apostas desportivas tem as melhores odds no futebol em Portugal?", "category": "odds"},
         {"text": "Onde encontrar as melhores odds para apostar na Liga Portugal em 2025?", "category": "odds"},
         {"text": "Qual operador oferece as odds mais competitivas nos jogos da Champions League em Portugal?", "category": "odds"},
+        {"text": "Qual site de apostas tem as melhores odds em ténis e basquetebol em Portugal?", "category": "odds"},
+
+        # Régulation — NOUVEAU
+        {"text": "Quais operadores de apostas são licenciados pelo SRIJ em Portugal?", "category": "regulation"},
+        {"text": "Como saber se um site de apostas desportivas é legal em Portugal?", "category": "regulation"},
+        {"text": "Quais são os operadores de apostas mais regulados e seguros em Portugal?", "category": "regulation"},
+        {"text": "É seguro apostar em sites sem licença do SRIJ em Portugal?", "category": "regulation"},
+
+        # Paiement — NOUVEAU
+        {"text": "Qual site de apostas desportivas tem os levantamentos mais rápidos em Portugal?", "category": "payment"},
+        {"text": "Quais métodos de pagamento são aceites nos sites de apostas em Portugal?", "category": "payment"},
+        {"text": "Qual operador de apostas tem os melhores prazos de levantamento em Portugal?", "category": "payment"},
     ],
 
     # ── CÔTE D'IVOIRE ────────────────────────
@@ -144,17 +178,31 @@ PROMPT_LIBRARY = {
         {"text": "Je veux parier sur la CAN et la Premier League depuis la Côte d'Ivoire, quel site choisir ?", "category": "visibility"},
         {"text": "Quelles applications de paris sportifs fonctionnent bien en Côte d'Ivoire en 2025 ?", "category": "visibility"},
         {"text": "Quel opérateur de paris est le plus fiable pour les parieurs ivoiriens ?", "category": "visibility"},
+        {"text": "Quel site de paris sportifs est le plus populaire en Afrique de l'Ouest ?", "category": "visibility"},
 
-        # Image de marque
+        # Image de marque (NEUTRE — supprimé "Betclic vs 1xBet vs Sportybet")
         {"text": "Quel site de paris sportifs en Côte d'Ivoire est le plus sécurisé et sérieux ?", "category": "brand"},
         {"text": "Quels opérateurs de paris proposent les meilleurs bonus pour les nouveaux inscrits en Côte d'Ivoire ?", "category": "brand"},
-        {"text": "Quelle est la réputation de Betclic comparée à 1xBet et Sportybet en Afrique de l'Ouest ?", "category": "brand"},
         {"text": "Quel site de paris sportifs propose une interface adaptée aux utilisateurs mobiles en Côte d'Ivoire ?", "category": "brand"},
+        {"text": "Quel opérateur de paris a la meilleure réputation auprès des parieurs ivoiriens ?", "category": "brand"},
+        {"text": "Quel site de paris sportifs propose le meilleur support en français en Afrique de l'Ouest ?", "category": "brand"},
 
         # Cotes
         {"text": "Quel site de paris propose les meilleures cotes sur les matchs africains depuis la Côte d'Ivoire ?", "category": "odds"},
         {"text": "Où trouver les meilleures cotes pour parier sur la CAN depuis la Côte d'Ivoire ?", "category": "odds"},
         {"text": "Quel opérateur offre les cotes les plus compétitives sur la Premier League en Côte d'Ivoire ?", "category": "odds"},
+        {"text": "Quel site de paris propose les meilleures cotes sur le football ivoirien (Ligue 1 ivoirienne) ?", "category": "odds"},
+
+        # Régulation — NOUVEAU (gros avantage Betclic vs 1xBet non licencié)
+        {"text": "Quels sites de paris sportifs sont légaux et autorisés en Côte d'Ivoire ?", "category": "regulation"},
+        {"text": "Est-ce que 1xBet est un site de paris légal en Côte d'Ivoire ?", "category": "regulation"},
+        {"text": "Comment vérifier qu'un site de paris sportifs est sûr en Afrique de l'Ouest ?", "category": "regulation"},
+        {"text": "Quels sont les risques de parier sur un site non régulé en Côte d'Ivoire ?", "category": "regulation"},
+
+        # Paiement — NOUVEAU (mobile money = clé en Afrique)
+        {"text": "Quel site de paris sportifs accepte le paiement par mobile money en Côte d'Ivoire ?", "category": "payment"},
+        {"text": "Quels sites de paris permettent des dépôts et retraits par Orange Money ou MTN Money en Côte d'Ivoire ?", "category": "payment"},
+        {"text": "Quel opérateur de paris propose les retraits les plus rapides en Côte d'Ivoire ?", "category": "payment"},
     ],
 
     # ── POLOGNE ──────────────────────────────
@@ -165,17 +213,31 @@ PROMPT_LIBRARY = {
         {"text": "Chcę obstawiać piłkę nożną w Polsce — który serwis polecasz?", "category": "visibility"},
         {"text": "Jakie są najlepsze aplikacje do zakładów sportowych dostępne w Polsce?", "category": "visibility"},
         {"text": "Który bukmacher jest najczęściej używany w Polsce w 2025 roku?", "category": "visibility"},
+        {"text": "Który serwis bukmacherski poleciłbyś początkującemu graczowi w Polsce?", "category": "visibility"},
 
-        # Image de marque
+        # Image de marque (NEUTRE — supprimé "Betclic vs Fortuna vs STS")
         {"text": "Który serwis bukmacherski w Polsce oferuje najlepsze doświadczenie użytkownika?", "category": "brand"},
         {"text": "Który bukmacher w Polsce jest najbezpieczniejszy i najbardziej wiarygodny?", "category": "brand"},
         {"text": "Który serwis bukmacherski oferuje najlepsze promocje i bonusy w Polsce?", "category": "brand"},
-        {"text": "Jaka jest reputacja Betclic w porównaniu z Fortuną i STS w Polsce?", "category": "brand"},
+        {"text": "Który bukmacher ma najlepszą aplikację mobilną w Polsce?", "category": "brand"},
+        {"text": "Który serwis bukmacherski ma najlepszą obsługę klienta w Polsce?", "category": "brand"},
 
         # Cotes
         {"text": "Który bukmacher oferuje najlepsze kursy na piłkę nożną w Polsce?", "category": "odds"},
         {"text": "Gdzie znaleźć najlepsze kursy na Ekstraklasę w 2025 roku?", "category": "odds"},
         {"text": "Który operator oferuje najbardziej konkurencyjne kursy na mecze Ligi Mistrzów w Polsce?", "category": "odds"},
+        {"text": "Który bukmacher oferuje najlepsze kursy na tenis i koszykówkę w Polsce?", "category": "odds"},
+
+        # Régulation — NOUVEAU
+        {"text": "Którzy bukmacherzy posiadają polską licencję i są legalni w Polsce?", "category": "regulation"},
+        {"text": "Jak sprawdzić, czy serwis bukmacherski jest legalny w Polsce?", "category": "regulation"},
+        {"text": "Którzy bukmacherzy są najbardziej regulowani i bezpieczni w Polsce?", "category": "regulation"},
+        {"text": "Jakie ryzyko wiąże się z grą u nielegalnego bukmachera w Polsce?", "category": "regulation"},
+
+        # Paiement — NOUVEAU
+        {"text": "Który serwis bukmacherski ma najszybsze wypłaty w Polsce?", "category": "payment"},
+        {"text": "Jakie metody płatności są dostępne u polskich bukmacherów?", "category": "payment"},
+        {"text": "Który bukmacher oferuje najlepsze warunki wypłat w Polsce?", "category": "payment"},
     ],
 }
 
@@ -408,16 +470,26 @@ def get_demo_response(category: str, language: str) -> str:
 # ─────────────────────────────────────────────
 
 POS_WORDS = {
-    "fr":    ["meilleur", "excellent", "fiable", "sérieux", "populaire", "recommandé", "leader", "référence", "sécurisé", "compétitif"],
-    "pt":    ["melhor", "excelente", "confiável", "popular", "recomendado", "líder", "referência", "seguro", "competitivo"],
-    "fr-ci": ["meilleur", "fiable", "sérieux", "populaire", "recommandé", "sécurisé", "compétitif"],
-    "pl":    ["najlepszy", "doskonały", "godny zaufania", "popularny", "polecany", "lider", "bezpieczny", "konkurencyjny"],
+    "fr":    ["meilleur", "excellent", "fiable", "sérieux", "populaire", "recommandé", "leader",
+              "référence", "sécurisé", "compétitif", "agréé", "licencié", "autorisé", "légal",
+              "rapide", "instantané", "gratuit", "régulé"],
+    "pt":    ["melhor", "excelente", "confiável", "popular", "recomendado", "líder", "referência",
+              "seguro", "competitivo", "licenciado", "autorizado", "legal", "rápido", "gratuito",
+              "regulado"],
+    "fr-ci": ["meilleur", "fiable", "sérieux", "populaire", "recommandé", "sécurisé", "compétitif",
+              "agréé", "licencié", "autorisé", "légal", "rapide", "gratuit", "régulé"],
+    "pl":    ["najlepszy", "doskonały", "godny zaufania", "popularny", "polecany", "lider",
+              "bezpieczny", "konkurencyjny", "licencjonowany", "legalny", "szybki", "regulowany"],
 }
 NEG_WORDS = {
-    "fr":    ["mauvais", "problème", "arnaque", "frauduleux", "lent", "refus"],
-    "pt":    ["mau", "problema", "fraude", "lento", "recusa"],
-    "fr-ci": ["mauvais", "problème", "arnaque", "lent", "refus"],
-    "pl":    ["zły", "problem", "oszustwo", "powolny", "odmowa"],
+    "fr":    ["mauvais", "problème", "arnaque", "frauduleux", "lent", "refus",
+              "illégal", "interdit", "non autorisé", "bloqué", "dangereux"],
+    "pt":    ["mau", "problema", "fraude", "lento", "recusa",
+              "ilegal", "proibido", "bloqueado", "perigoso"],
+    "fr-ci": ["mauvais", "problème", "arnaque", "lent", "refus",
+              "illégal", "interdit", "non autorisé", "bloqué", "dangereux"],
+    "pl":    ["zły", "problem", "oszustwo", "powolny", "odmowa",
+              "nielegalny", "zabroniony", "zablokowany", "niebezpieczny"],
 }
 
 
