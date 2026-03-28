@@ -343,7 +343,7 @@ def landing_layout():
         ], style={
             "padding": "40px 24px 80px",
             "background": C["bg"], "minHeight": "calc(100vh - 56px)",
-            "fontFamily": "Syne, sans-serif",
+            "fontFamily": T.FONT_BODY,
         }),
     ])
 
@@ -379,11 +379,7 @@ def display_page(pathname):
 # CSS GLOBAL
 # ─────────────────────────────────────────────
 
-app.index_string = app.index_string.replace("</head>", """<style>
-body { font-family: 'Syne', sans-serif !important; }
-a { transition: opacity 0.15s; }
-a:hover { opacity: 0.8; }
-</style></head>""")
+app.index_string = app.index_string.replace("</head>", T.DASH_CSS + "</head>")
 
 
 # ─────────────────────────────────────────────

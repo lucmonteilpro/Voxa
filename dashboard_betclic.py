@@ -375,7 +375,7 @@ def build_bar_chart(scores_df: pd.DataFrame) -> go.Figure:
         return go.Figure()
     df = scores_df.sort_values("geo_score", ascending=True).reset_index(drop=True)
     colors   = ["#4f46e5" if r["brand"] == PRIMARY_BRAND
-                else BRAND_COLORS.get(r["brand"], "#9ca3af")
+                else BRAND_COLORS.get(r["brand"], T.T3)
                 for _, r in df.iterrows()]
     opacities = [1.0 if r["brand"] == PRIMARY_BRAND else 0.5
                  for _, r in df.iterrows()]
@@ -386,14 +386,14 @@ def build_bar_chart(scores_df: pd.DataFrame) -> go.Figure:
         showlegend=False,
     ))
     fig.update_layout(
-        paper_bgcolor="white", plot_bgcolor="white",
+        paper_bgcolor=T.W, plot_bgcolor=T.W,
         margin=dict(l=4, r=40, t=4, b=4),
         height=max(180, len(df) * 36),
         xaxis=dict(range=[0, 105], showgrid=True, gridcolor="#f3f4f6",
                    zeroline=False, tickfont=dict(size=11)),
         yaxis=dict(showgrid=False, zeroline=False, automargin=True,
-                   tickfont=dict(size=12, family="Syne, sans-serif")),
-        font=dict(family="Syne, sans-serif"),
+                   tickfont=dict(size=12, family=T.FONT_BODY)),
+        font=dict(family=T.FONT_BODY),
         bargap=0.3,
     )
     return fig
@@ -406,7 +406,7 @@ def build_history_chart(market: str, category: str = "all", llm: str = "all") ->
         fig.add_annotation(
             text="Lance plusieurs runs pour voir l'évolution",
             x=0.5, y=0.5, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=13, color="#9ca3af"),
+            showarrow=False, font=dict(size=13, color=T.T3),
         )
     else:
         fig.add_trace(go.Scatter(
@@ -418,9 +418,9 @@ def build_history_chart(market: str, category: str = "all", llm: str = "all") ->
             hovertemplate="<b>%{x}</b><br>Score : %{y}/100<extra></extra>",
         ))
     fig.update_layout(
-        paper_bgcolor="white", plot_bgcolor="white",
+        paper_bgcolor=T.W, plot_bgcolor=T.W,
         margin=dict(l=8, r=8, t=8, b=8), height=200,
-        font=dict(family="Syne, sans-serif", size=11, color="#6b7280"),
+        font=dict(family=T.FONT_BODY, size=11, color=T.T2),
         xaxis=dict(showgrid=False, zeroline=False, tickformat="%d %b"),
         yaxis=dict(showgrid=True, gridcolor="#f3f4f6",
                    zeroline=False, range=[0, 105]),
@@ -461,15 +461,15 @@ def build_radar_chart() -> go.Figure:
         polar=dict(
             radialaxis=dict(visible=True, range=[0, 100],
                             tickfont=dict(size=10)),
-            angularaxis=dict(tickfont=dict(size=12, family="Syne, sans-serif")),
-            bgcolor="white",
+            angularaxis=dict(tickfont=dict(size=12, family=T.FONT_BODY)),
+            bgcolor=T.W,
         ),
         showlegend=True,
-        legend=dict(font=dict(family="Syne, sans-serif", size=11)),
-        paper_bgcolor="white",
+        legend=dict(font=dict(family=T.FONT_BODY, size=11)),
+        paper_bgcolor=T.W,
         margin=dict(l=40, r=40, t=20, b=20),
         height=300,
-        font=dict(family="Syne, sans-serif"),
+        font=dict(family=T.FONT_BODY),
     )
     return fig
 
@@ -479,7 +479,7 @@ def build_radar_chart() -> go.Figure:
 
 def card(children, style_extra=None):
     style = {
-        "background": "white", "border": "1px solid #e5e7eb",
+        "background": T.W, "border": "1px solid #e5e7eb",
         "borderRadius": 12, "padding": 24,
         "boxShadow": "0 1px 3px rgba(0,0,0,0.06)",
     }
@@ -491,7 +491,7 @@ def card(children, style_extra=None):
 def card_title(text):
     return html.Div(text, style={
         "fontSize": 11, "fontWeight": 700, "textTransform": "uppercase",
-        "letterSpacing": "1.5px", "color": "#9ca3af", "marginBottom": 16,
+        "letterSpacing": "1.5px", "color": T.T3, "marginBottom": 16,
     })
 
 
@@ -502,7 +502,7 @@ def hero_section(market: str, category: str = "all", llm: str = "all") -> html.D
     if scores_df.empty:
         return html.Div(
             f"Aucune donnée pour {label_market} — lance : python3 tracker_betclic.py --demo",
-            style={"color": "#9ca3af", "padding": "24px"})
+            style={"color": T.T3, "padding": "24px"})
 
     pr = scores_df[scores_df["brand"] == PRIMARY_BRAND]
     primary_score    = round(pr["geo_score"].values[0]) if not pr.empty else 0
@@ -531,7 +531,7 @@ def hero_section(market: str, category: str = "all", llm: str = "all") -> html.D
         annotations=[dict(
             text=f"<b>{primary_score}</b><br>/100",
             x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False,
-            font=dict(size=24, color=sc, family="Syne, sans-serif"),
+            font=dict(size=24, color=sc, family=T.FONT_BODY),
         )],
     )
 
@@ -545,33 +545,33 @@ def hero_section(market: str, category: str = "all", llm: str = "all") -> html.D
             html.Div(
                 f"{label_market} · {cat_label}",
                 style={"fontSize": 11, "fontWeight": 700, "letterSpacing": "1.5px",
-                       "textTransform": "uppercase", "color": "#9ca3af", "marginBottom": 6}),
+                       "textTransform": "uppercase", "color": T.T3, "marginBottom": 6}),
             html.Div(label_score,
                      style={"fontSize": 24, "fontWeight": 800, "letterSpacing": "-0.5px",
                             "color": sc, "marginBottom": 4}),
             html.Div(
                 f"Mesuré sur {n_prompts} prompts · Claude Haiku · {date.today().strftime('%d %b %Y')}",
-                style={"fontSize": 12, "color": "#9ca3af", "marginBottom": 20}),
+                style={"fontSize": 12, "color": T.T3, "marginBottom": 20}),
             html.Div([
                 html.Div([
                     html.Div(f"#{primary_rank}",
                              style={"fontSize": 24, "fontWeight": 800,
-                                    "lineHeight": "1", "color": "#111827",
+                                    "lineHeight": "1", "color": T.W,
                                     "display": "inline"}),
                     html.Span(f"/{len(scores_df)}",
-                              style={"fontSize": 14, "color": "#9ca3af"}),
+                              style={"fontSize": 14, "color": T.T3}),
                     html.Div("Classement",
                              style={"fontSize": 10, "fontWeight": 700, "textTransform": "uppercase",
-                                    "letterSpacing": "1px", "color": "#9ca3af", "marginTop": 3}),
+                                    "letterSpacing": "1px", "color": T.T3, "marginTop": 3}),
                 ]),
                 html.Div(style={"width": 1, "background": "#e5e7eb", "margin": "0 28px"}),
                 html.Div([
                     html.Div(str(primary_mentions),
                              style={"fontSize": 24, "fontWeight": 800,
-                                    "lineHeight": "1", "color": "#111827"}),
+                                    "lineHeight": "1", "color": T.W}),
                     html.Div("Mentions",
                              style={"fontSize": 10, "fontWeight": 700, "textTransform": "uppercase",
-                                    "letterSpacing": "1px", "color": "#9ca3af", "marginTop": 3}),
+                                    "letterSpacing": "1px", "color": T.T3, "marginTop": 3}),
                 ]),
                 html.Div(style={"width": 1, "background": "#e5e7eb", "margin": "0 28px"}),
                 html.Div([
@@ -580,22 +580,22 @@ def hero_section(market: str, category: str = "all", llm: str = "all") -> html.D
                                     "lineHeight": "1", "color": nss_color}),
                     html.Div("Net Sentiment",
                              style={"fontSize": 10, "fontWeight": 700, "textTransform": "uppercase",
-                                    "letterSpacing": "1px", "color": "#9ca3af", "marginTop": 3}),
+                                    "letterSpacing": "1px", "color": T.T3, "marginTop": 3}),
                 ]),
                 html.Div(style={"width": 1, "background": "#e5e7eb", "margin": "0 28px"}),
                 html.Div([
                     html.Div(str(n_prompts),
                              style={"fontSize": 24, "fontWeight": 800,
-                                    "lineHeight": "1", "color": "#111827"}),
+                                    "lineHeight": "1", "color": T.W}),
                     html.Div("Prompts",
                              style={"fontSize": 10, "fontWeight": 700, "textTransform": "uppercase",
-                                    "letterSpacing": "1px", "color": "#9ca3af", "marginTop": 3}),
+                                    "letterSpacing": "1px", "color": T.T3, "marginTop": 3}),
                 ]),
             ], style={"display": "flex", "alignItems": "center"}),
         ], style={"flex": 1}),
     ], style={
         "display": "flex", "alignItems": "center", "gap": 48,
-        "background": "white", "border": "1px solid #e5e7eb",
+        "background": T.W, "border": "1px solid #e5e7eb",
         "borderRadius": 12, "padding": "28px 32px",
         "marginBottom": 20, "boxShadow": "0 1px 3px rgba(0,0,0,0.07)",
     })
@@ -603,7 +603,7 @@ def hero_section(market: str, category: str = "all", llm: str = "all") -> html.D
 
 def prompt_cards(df: pd.DataFrame) -> list:
     if df.empty:
-        return [html.Div("Aucun résultat.", style={"color": "#9ca3af", "padding": "16px 0", "fontSize": 13})]
+        return [html.Div("Aucun résultat.", style={"color": T.T3, "padding": "16px 0", "fontSize": 13})]
     cards = []
     for _, row in df.iterrows():
         sc    = score_color(row["geo_score"])
@@ -617,10 +617,10 @@ def prompt_cards(df: pd.DataFrame) -> list:
             "payment":    ("Paiement",        "#7e22ce", "#f3e8ff"),
         }
         cat_label, cat_color, cat_bg = cat_styles.get(
-            row["category"], (row["category"], "#6b7280", "#f3f4f6"))
+            row["category"], (row["category"], T.T2, "#f3f4f6"))
         pos   = {"early": "↑ Début", "mid": "→ Milieu", "late": "↓ Fin"}.get(row.get("position"), "—")
         sent  = row.get("sentiment") or "—"
-        sc_s  = {"positive": "#16a34a", "neutral": "#d97706", "negative": "#dc2626"}.get(sent, "#9ca3af")
+        sc_s  = {"positive": "#16a34a", "neutral": "#d97706", "negative": "#dc2626"}.get(sent, T.T3)
         bg_s  = {"positive": "#dcfce7", "neutral": "#fef3c7", "negative": "#fee2e2"}.get(sent, "#f3f4f6")
         raw   = str(row.get("raw_response", "") or "")
         raw_block = []
@@ -628,14 +628,14 @@ def prompt_cards(df: pd.DataFrame) -> list:
             raw_block = [html.Div(raw[:600] + ("…" if len(raw) > 600 else ""), style={
                 "marginTop": 10, "paddingTop": 10,
                 "borderTop": "1px solid #f3f4f6",
-                "fontSize": 11, "color": "#6b7280",
+                "fontSize": 11, "color": T.T2,
                 "lineHeight": "1.8", "fontFamily": "'DM Mono', monospace",
             })]
         cards.append(html.Div([
             html.Div([
                 html.Div([
                     html.Span(icon, style={"color": ic, "fontWeight": 800, "marginRight": 8}),
-                    html.Span(row["prompt"], style={"fontSize": 13, "color": "#111827", "lineHeight": "1.5"}),
+                    html.Span(row["prompt"], style={"fontSize": 13, "color": T.W, "lineHeight": "1.5"}),
                 ], style={"marginBottom": 10}),
                 html.Div([
                     html.Span(cat_label, style={
@@ -644,7 +644,7 @@ def prompt_cards(df: pd.DataFrame) -> list:
                         "textTransform": "uppercase", "letterSpacing": "0.5px", "marginRight": 6}),
                     html.Span(pos, style={
                         "fontSize": 10, "fontWeight": 600, "padding": "3px 10px",
-                        "borderRadius": 20, "background": "#f3f4f6", "color": "#6b7280", "marginRight": 6}),
+                        "borderRadius": 20, "background": "#f3f4f6", "color": T.T2, "marginRight": 6}),
                     html.Span(sent, style={
                         "fontSize": 10, "fontWeight": 700, "padding": "3px 10px",
                         "borderRadius": 20, "background": bg_s, "color": sc_s, "marginRight": 6}),
@@ -657,12 +657,12 @@ def prompt_cards(df: pd.DataFrame) -> list:
                 html.Div(f"{row['geo_score']:.0f}",
                          style={"fontSize": 30, "fontWeight": 800, "color": sc,
                                 "letterSpacing": "-1px", "lineHeight": "1"}),
-                html.Div("/100", style={"fontSize": 10, "color": "#9ca3af"}),
+                html.Div("/100", style={"fontSize": 10, "color": T.T3}),
             ], style={"textAlign": "right", "flexShrink": 0, "paddingLeft": 16}),
         ], style={
             "display": "flex", "alignItems": "flex-start", "gap": 16,
             "border": "1px solid #e5e7eb", "borderRadius": 12,
-            "padding": "16px 20px", "marginBottom": 10, "background": "white",
+            "padding": "16px 20px", "marginBottom": 10, "background": T.W,
             "boxShadow": "0 1px 2px rgba(0,0,0,0.04)",
         }))
     return cards
@@ -690,7 +690,7 @@ TOPBAR = html.Div([
             "width": 32, "height": 32, "borderRadius": 8,
             "background": "linear-gradient(135deg,#e63946,#c1121f)",
             "display": "flex", "alignItems": "center", "justifyContent": "center",
-            "fontSize": 15, "fontWeight": 800, "color": "white", "flexShrink": 0,
+            "fontSize": 15, "fontWeight": 800, "color": T.W, "flexShrink": 0,
         }),
         html.Span("voxa", style={"fontWeight": 800, "fontSize": 18, "letterSpacing": "-0.5px"}),
         html.Span("Betclic · GEO Intelligence", style={
@@ -704,20 +704,20 @@ TOPBAR = html.Div([
         html.Div(id="demo-badge-b"),
         html.A("↓ Export CSV", id="export-link-b", href="/export/betclic/csv?market=fr",
                style={"padding": "6px 14px", "borderRadius": 8,
-                      "border": "1px solid #e5e7eb", "background": "white",
-                      "fontSize": 12, "fontWeight": 600, "color": "#6b7280",
+                      "border": "1px solid #e5e7eb", "background": T.W,
+                      "fontSize": 12, "fontWeight": 600, "color": T.T2,
                       "textDecoration": "none"}),
         html.Div(["Client : ", html.Strong(CLIENT_NAME)],
-                 style={"background": "#f9fafb", "border": "1px solid #e5e7eb",
+                 style={"background": T.BG, "border": "1px solid #e5e7eb",
                         "borderRadius": 8, "padding": "5px 12px",
-                        "fontSize": 12, "color": "#6b7280"}),
+                        "fontSize": 12, "color": T.T2}),
     ], style={"display": "flex", "alignItems": "center", "gap": 12}),
 ], style={
     "display": "flex", "alignItems": "center", "justifyContent": "space-between",
     "height": 56, "padding": "0 32px",
-    "background": "white", "borderBottom": "1px solid #e5e7eb",
+    "background": T.W, "borderBottom": "1px solid #e5e7eb",
     "position": "sticky", "top": 0, "zIndex": 100,
-    "fontFamily": "Syne, sans-serif",
+    "fontFamily": T.FONT_BODY,
 })
 
 # Sélecteurs marché + catégorie
@@ -725,7 +725,7 @@ CONTROLS = html.Div([
     html.Div([
         html.Div("Marché", style={"fontSize": 10, "fontWeight": 700,
                                    "textTransform": "uppercase", "letterSpacing": "1px",
-                                   "color": "#9ca3af", "marginBottom": 6}),
+                                   "color": T.T3, "marginBottom": 6}),
         dcc.RadioItems(
             id="market-select",
             options=[{"label": v, "value": k} for k, v in MARKETS.items()],
@@ -733,13 +733,13 @@ CONTROLS = html.Div([
             inline=True,
             inputStyle={"marginRight": 4},
             labelStyle={"marginRight": 16, "fontSize": 13, "fontWeight": 600,
-                        "cursor": "pointer", "fontFamily": "Syne, sans-serif"},
+                        "cursor": "pointer", "fontFamily": T.FONT_BODY},
         ),
     ]),
     html.Div([
         html.Div("Catégorie", style={"fontSize": 10, "fontWeight": 700,
                                       "textTransform": "uppercase", "letterSpacing": "1px",
-                                      "color": "#9ca3af", "marginBottom": 6}),
+                                      "color": T.T3, "marginBottom": 6}),
         dcc.RadioItems(
             id="cat-select",
             options=[{"label": "Toutes", "value": "all"}] +
@@ -748,22 +748,22 @@ CONTROLS = html.Div([
             inline=True,
             inputStyle={"marginRight": 4},
             labelStyle={"marginRight": 16, "fontSize": 13, "fontWeight": 600,
-                        "cursor": "pointer", "fontFamily": "Syne, sans-serif"},
+                        "cursor": "pointer", "fontFamily": T.FONT_BODY},
         ),
     ]),
     html.Div([
         html.Div("LLM", style={"fontSize": 10, "fontWeight": 700,
                                  "textTransform": "uppercase", "letterSpacing": "1px",
-                                 "color": "#9ca3af", "marginBottom": 6}),
+                                 "color": T.T3, "marginBottom": 6}),
         dcc.Dropdown(
             id="llm-select",
             options=[{"label": "Tous les LLMs", "value": "all"}],
             value="all", clearable=False,
-            style={"width": 200, "fontFamily": "Syne, sans-serif", "fontSize": 13},
+            style={"width": 200, "fontFamily": T.FONT_BODY, "fontSize": 13},
         ),
     ]),
 ], style={
-    "background": "white", "border": "1px solid #e5e7eb",
+    "background": T.W, "border": "1px solid #e5e7eb",
     "borderRadius": 12, "padding": "16px 24px",
     "marginBottom": 20, "display": "flex", "gap": 40, "alignItems": "flex-start",
     "boxShadow": "0 1px 3px rgba(0,0,0,0.04)",
@@ -781,29 +781,29 @@ app.layout = html.Div([
             dbc.Tab(label="Classement & Évolution", tab_id="classement",
                     label_style={"fontSize": 12, "fontWeight": 700,
                                  "textTransform": "uppercase", "letterSpacing": "0.8px",
-                                 "fontFamily": "Syne, sans-serif"}),
+                                 "fontFamily": T.FONT_BODY}),
             dbc.Tab(label="Insights & Recommandations", tab_id="insights",
                     label_style={"fontSize": 12, "fontWeight": 700,
                                  "textTransform": "uppercase", "letterSpacing": "0.8px",
-                                 "fontFamily": "Syne, sans-serif"}),
+                                 "fontFamily": T.FONT_BODY}),
             dbc.Tab(label="Vue synthèse 4 marchés", tab_id="overview",
                     label_style={"fontSize": 12, "fontWeight": 700,
                                  "textTransform": "uppercase", "letterSpacing": "0.8px",
-                                 "fontFamily": "Syne, sans-serif"}),
+                                 "fontFamily": T.FONT_BODY}),
             dbc.Tab(label="Analyse par prompt",     tab_id="prompts",
                     label_style={"fontSize": 12, "fontWeight": 700,
                                  "textTransform": "uppercase", "letterSpacing": "0.8px",
-                                 "fontFamily": "Syne, sans-serif"}),
+                                 "fontFamily": T.FONT_BODY}),
             dbc.Tab(label="Bibliothèque prompts",   tab_id="library",
                     label_style={"fontSize": 12, "fontWeight": 700,
                                  "textTransform": "uppercase", "letterSpacing": "0.8px",
-                                 "fontFamily": "Syne, sans-serif"}),
+                                 "fontFamily": T.FONT_BODY}),
         ], id="tabs-b", active_tab="classement",
-           style={"marginBottom": 20, "fontFamily": "Syne, sans-serif"}),
+           style={"marginBottom": 20, "fontFamily": T.FONT_BODY}),
         html.Div(id="tab-content-b"),
     ], style={"maxWidth": 1280, "margin": "0 auto",
               "padding": "28px 32px 60px",
-              "fontFamily": "Syne, sans-serif"}),
+              "fontFamily": T.FONT_BODY}),
 ], style={"background": "#f4f5f9", "minHeight": "100vh"})
 
 # ─────────────────────────────────────────────
@@ -894,7 +894,7 @@ def render_tab(active_tab, market, cat, llm):
                                          style={"fontSize": 11, "fontWeight": 700,
                                                 "textTransform": "uppercase",
                                                 "letterSpacing": "1px",
-                                                "color": "#9ca3af", "marginBottom": 6}),
+                                                "color": T.T3, "marginBottom": 6}),
                                 html.Div(
                                     str(round(load_scores(market, ck)[
                                         load_scores(market, ck)["brand"] == PRIMARY_BRAND
@@ -906,7 +906,7 @@ def render_tab(active_tab, market, cat, llm):
                                     else "—",
                                     style={"fontSize": 28, "fontWeight": 800,
                                            "color": "#4f46e5"}),
-                                html.Div("/100", style={"fontSize": 10, "color": "#9ca3af"}),
+                                html.Div("/100", style={"fontSize": 10, "color": T.T3}),
                             ], style={
                                 "border": "1px solid #e5e7eb", "borderRadius": 10,
                                 "padding": "14px 16px", "textAlign": "center",
@@ -924,7 +924,7 @@ def render_tab(active_tab, market, cat, llm):
                                      style={"fontSize": 11, "fontWeight": 700,
                                             "textTransform": "uppercase",
                                             "letterSpacing": "1px",
-                                            "color": "#9ca3af", "marginBottom": 6}),
+                                            "color": T.T3, "marginBottom": 6}),
                             html.Div(
                                 (f"+{row['net_sentiment']:.0f}%"
                                  if row["net_sentiment"] >= 0
@@ -940,7 +940,7 @@ def render_tab(active_tab, market, cat, llm):
                         if not scores_df.empty
                     ], style={"display": "flex", "gap": 8, "flexWrap": "wrap"}),
                     html.Div("NSS = (prompts positifs − négatifs) / total × 100",
-                             style={"fontSize": 11, "color": "#9ca3af", "marginTop": 10}),
+                             style={"fontSize": 11, "color": T.T3, "marginTop": 10}),
                 ]), width=6),
             ]),
         ])
@@ -967,7 +967,7 @@ def render_tab(active_tab, market, cat, llm):
                         "background": ps["badge_bg"], "color": ps["badge_color"],
                         "marginRight": 10}),
                     html.Span(reco["title"], style={
-                        "fontSize": 14, "fontWeight": 700, "color": "#111827"}),
+                        "fontSize": 14, "fontWeight": 700, "color": T.W}),
                 ], style={"marginBottom": 8}),
                 html.Div(reco["body"], style={
                     "fontSize": 13, "color": "#4b5563", "lineHeight": "1.7",
@@ -981,14 +981,14 @@ def render_tab(active_tab, market, cat, llm):
 
         # Construire le gap analysis table
         gap_section = html.Div("Pas de données pour le gap analysis.",
-                               style={"color": "#9ca3af", "fontSize": 13})
+                               style={"color": T.T3, "fontSize": 13})
         if not gap_df.empty:
             # En-tête
             cat_cols = [c for c in gap_df.columns if c in CATEGORY_LABELS]
             header = [html.Th("", style={"width": 140})] + [
                 html.Th(CATEGORY_LABELS.get(c, c), style={
                     "fontSize": 10, "fontWeight": 700, "textTransform": "uppercase",
-                    "letterSpacing": "1px", "color": "#9ca3af", "textAlign": "center",
+                    "letterSpacing": "1px", "color": T.T3, "textAlign": "center",
                     "padding": "8px 12px"})
                 for c in cat_cols
             ]
@@ -1004,7 +1004,7 @@ def render_tab(active_tab, market, cat, llm):
                 cells = [html.Td(brand, style={
                     "fontWeight": 800 if is_primary else 600,
                     "fontSize": 13,
-                    "color": BRAND_COLORS.get(brand, "#111827") if is_primary else "#111827",
+                    "color": BRAND_COLORS.get(brand, T.W) if is_primary else T.W,
                     "padding": "10px 12px"})]
                 for c in cat_cols:
                     val = int(gap_df.loc[brand, c]) if c in gap_df.columns else 0
@@ -1020,8 +1020,8 @@ def render_tab(active_tab, market, cat, llm):
                             bg = "#dcfce7"
                             color = "#15803d"
                         else:
-                            bg = "#f9fafb"
-                            color = "#6b7280"
+                            bg = T.BG
+                            color = T.T2
                     cells.append(html.Td(str(val), style={
                         "textAlign": "center", "fontSize": 14,
                         "fontWeight": 800 if is_primary else 600,
@@ -1032,7 +1032,7 @@ def render_tab(active_tab, market, cat, llm):
             gap_section = dbc.Table([
                 html.Thead(html.Tr(header)),
                 html.Tbody(rows),
-            ], bordered=False, hover=True, style={"fontFamily": "Syne, sans-serif"})
+            ], bordered=False, hover=True, style={"fontFamily": T.FONT_BODY})
 
         # ── Recommandations persistantes depuis voxa_db ──────
         try:
@@ -1049,7 +1049,7 @@ def render_tab(active_tab, market, cat, llm):
                 html.Span({"critical":"🔴","warning":"🟡","info":"🟢"}.get(a.get("severity","info"),"🟢"),
                           style={"marginRight": 6}),
                 html.Strong(a["title"]), f" — {a['body']}",
-                html.Span(f"  {a['created_at'][:10]}", style={"fontSize":10,"color":"#9ca3af","marginLeft":8}),
+                html.Span(f"  {a['created_at'][:10]}", style={"fontSize":10,"color":T.T3,"marginLeft":8}),
             ], style={"fontSize":12,"padding":"8px 12px","marginBottom":6,
                       "background":"#fffbeb","borderRadius":8,"borderLeft":"3px solid #d97706"})
             for a in db_alerts]
@@ -1074,15 +1074,15 @@ def render_tab(active_tab, market, cat, llm):
                         "background": ps["badge_bg"], "color": ps["badge_color"],
                         "marginRight": 8}),
                     html.Span(r.get("title",""), style={
-                        "fontSize": 13, "fontWeight": 700, "color": "#111827"}),
+                        "fontSize": 13, "fontWeight": 700, "color": T.W}),
                     *([ html.Span(f"+{impact:.0f} pts estimés",
-                        style={"fontSize":10,"color":"#9ca3af","marginLeft":8})] if impact else []),
+                        style={"fontSize":10,"color":T.T3,"marginLeft":8})] if impact else []),
                 ], style={"marginBottom": 6}),
                 html.Div(r.get("body",""), style={
                     "fontSize": 12, "color": "#4b5563", "lineHeight": "1.7",
                     "paddingLeft": 24}),
                 *([ html.Div(f"Prompt : « {r['prompt_text'][:80]}… »",
-                    style={"fontSize":10,"color":"#9ca3af","marginTop":4,
+                    style={"fontSize":10,"color":T.T3,"marginTop":4,
                            "paddingLeft":24,"fontStyle":"italic"})
                    ] if r.get("prompt_text") else []),
             ], style={
@@ -1099,7 +1099,7 @@ def render_tab(active_tab, market, cat, llm):
                     card_title("RECOMMANDATIONS GEO — ACTIONS PRIORITAIRES"),
                     html.Div(db_reco_cards),
                     html.Div("Générées automatiquement après chaque run tracker.",
-                        style={"fontSize":11,"color":"#9ca3af","marginTop":12,"fontStyle":"italic"}),
+                        style={"fontSize":11,"color":T.T3,"marginTop":12,"fontStyle":"italic"}),
                 ]), width=12),
             ], className="mb-4")
 
@@ -1142,14 +1142,14 @@ def render_tab(active_tab, market, cat, llm):
                         html.Div([
                             html.Div(row["market"],
                                      style={"fontSize": 12, "fontWeight": 700,
-                                            "marginBottom": 8, "color": "#111827"}),
+                                            "marginBottom": 8, "color": T.W}),
                             html.Div(str(row["geo_score"]),
                                      style={"fontSize": 36, "fontWeight": 800,
                                             "color": score_color(row["geo_score"]),
                                             "letterSpacing": "-1px", "lineHeight": "1"}),
-                            html.Div("/100", style={"fontSize": 10, "color": "#9ca3af"}),
+                            html.Div("/100", style={"fontSize": 10, "color": T.T3}),
                             html.Div(f"#{row.get('rank', '—')}/{row.get('n_brands', '—')}",
-                                     style={"fontSize": 11, "color": "#9ca3af",
+                                     style={"fontSize": 11, "color": T.T3,
                                             "marginTop": 6}),
                         ], style={
                             "border": "1px solid #e5e7eb", "borderRadius": 12,
@@ -1176,7 +1176,7 @@ def render_tab(active_tab, market, cat, llm):
                     options=[{"label": "Toutes catégories", "value": "all"}] +
                             [{"label": v, "value": k} for k, v in CATEGORY_LABELS.items()],
                     value=cat, clearable=False,
-                    style={"width": 220, "fontFamily": "Syne, sans-serif", "fontSize": 13}),
+                    style={"width": 220, "fontFamily": T.FONT_BODY, "fontSize": 13}),
                 dcc.Dropdown(
                     id="filter-sent-b",
                     options=[
@@ -1186,9 +1186,9 @@ def render_tab(active_tab, market, cat, llm):
                         {"label": "Négatif",         "value": "negative"},
                     ],
                     value="all", clearable=False,
-                    style={"width": 180, "fontFamily": "Syne, sans-serif", "fontSize": 13}),
+                    style={"width": 180, "fontFamily": T.FONT_BODY, "fontSize": 13}),
                 html.Div(id="prompt-count-b",
-                         style={"fontSize": 12, "color": "#9ca3af", "alignSelf": "center"}),
+                         style={"fontSize": 12, "color": T.T3, "alignSelf": "center"}),
             ], style={"display": "flex", "gap": 12, "marginBottom": 16, "alignItems": "center"}),
             html.Div(id="prompt-list-b"),
         ])
@@ -1206,7 +1206,7 @@ def render_tab(active_tab, market, cat, llm):
                     "regulation": ("#15803d", "#dcfce7", "Régulation"),
                     "payment":    ("#7e22ce", "#f3e8ff", "Paiement"),
                 }
-                cc, cbg, clabel = cat_styles.get(row["category"], ("#6b7280", "#f3f4f6", row["category"]))
+                cc, cbg, clabel = cat_styles.get(row["category"], (T.T2, "#f3f4f6", row["category"]))
                 rows.append(html.Tr([
                     html.Td(flag, style={"fontSize": 13}),
                     html.Td(html.Span(clabel, style={
@@ -1219,22 +1219,22 @@ def render_tab(active_tab, market, cat, llm):
                                             "color": "#4f46e5", "background": "#eef2ff",
                                             "padding": "2px 8px", "borderRadius": 20})
                             if row["n_runs"]
-                            else html.Span("—", style={"color": "#9ca3af"})),
+                            else html.Span("—", style={"color": T.T3})),
                 ]))
         return card([
             html.Div(
                 f"Prompt Library · {CLIENT_NAME} · {len(df_lib)} prompts · 4 marchés",
                 style={"fontSize": 11, "fontWeight": 700, "textTransform": "uppercase",
-                       "letterSpacing": "1.5px", "color": "#9ca3af", "marginBottom": 16}),
+                       "letterSpacing": "1.5px", "color": T.T3, "marginBottom": 16}),
             dbc.Table([
                 html.Thead(html.Tr([
                     html.Th("Marché"), html.Th("Catégorie"),
                     html.Th("Prompt"), html.Th("Runs"),
                 ], style={"fontSize": 10, "fontWeight": 700, "textTransform": "uppercase",
-                          "letterSpacing": "1px", "color": "#9ca3af"})),
+                          "letterSpacing": "1px", "color": T.T3})),
                 html.Tbody(rows),
             ], bordered=False, hover=True,
-               style={"fontFamily": "Syne, sans-serif"}),
+               style={"fontFamily": T.FONT_BODY}),
         ])
 
     return html.Div()
