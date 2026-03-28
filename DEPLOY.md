@@ -1,153 +1,152 @@
 # Voxa — Guide de déploiement V2
-## PythonAnywhere · Multi-dashboard unifié · Scheduler
+## PythonAnywhere · Architecture complète
 
 ---
 
-## Architecture V2
+## Architecture
 
 ```
-Voxa/
-├── server.py               # ← NOUVEAU : serveur Flask partagé
-├── wsgi.py                 # ← NOUVEAU : point d'entrée WSGI unique
-├── app_router.py           # Landing page multi-client (/)
-├── dashboard.py            # Dashboard PSG (/psg/)
-├── dashboard_betclic.py    # Dashboard Betclic (/betclic/)
-├── tracker.py              # Tracker PSG (Claude API)
-├── tracker_betclic.py      # Tracker Betclic (4 marchés)
-├── email_reporter.py       # Envoi email automatique
-├── voxa.db                 # Base PSG
-├── voxa_betclic.db         # Base Betclic
-└── .env                    # Clés API (JAMAIS sur GitHub)
+wsgi.py (DispatcherMiddleware)
+  /           → app_router.py  + server.py (Flask partagé)
+                 Routes : /login /register /logout
+                          /demo (competitive vote + GEO Score)
+                          /settings (clé API)
+                          /health (JSON)
+                          /api/v1/vote|score|benchmark|history
+  /psg/       → dashboard.py   (Dash PSG — Flask propre)
+  /betclic/   → dashboard_betclic.py (Dash Betclic — Flask propre)
+
+Modules :
+  voxa_db.py     → lecture sur voxa.db + voxa_betclic.db + voxa_accounts.db
+  voxa_engine.py → competitive_vote + AlertEngine + RecoEngine
 ```
-
-### Ce qui a changé vs V1
-
-| Avant (V1)                           | Maintenant (V2)                        |
-|--------------------------------------|----------------------------------------|
-| 3 apps Dash séparées, 3 Flask servers | 1 seul Flask server partagé (server.py)|
-| PythonAnywhere ne servait qu'un dashboard | Les 3 apps tournent sur la même URL |
-| DB_PATH relatif → crash au Reload     | DB_PATH absolu via BASE_DIR            |
-| Routes /export/csv en conflit         | Routes uniques /export/psg/csv etc.    |
-
-### URLs en production
-
-| URL                                    | Contenu                      |
-|----------------------------------------|------------------------------|
-| lucsharper.pythonanywhere.com/         | Landing page sélection client |
-| lucsharper.pythonanywhere.com/psg/     | Dashboard PSG                |
-| lucsharper.pythonanywhere.com/betclic/ | Dashboard Betclic            |
-| lucsharper.pythonanywhere.com/health   | Healthcheck JSON             |
 
 ---
 
-## 1. Déploiement PythonAnywhere
+## 1. Premier déploiement (ou mise à jour)
 
-### A. Push GitHub (depuis le Mac)
+### A. Packages à installer (une seule fois)
+```bash
+workon voxa
+pip install flask-login flask-bcrypt anthropic
+```
+
+### B. Vérification avant Reload (toujours)
+```bash
+cd ~/Voxa && git pull
+python3 -c "from wsgi import application; print('WSGI OK')"
+```
+Si `WSGI OK` → Reload. Sinon → lire l'erreur.
+
+### C. Créer le compte admin (une seule fois)
+```bash
+cd ~/Voxa
+python3 -c "
+import voxa_db as vdb
+vdb.init_accounts_db()
+try:
+    aid = vdb.create_account('luc@sharper-media.com', 'voxa2026!', 'Luc Monteil', 'enterprise')
+    c = vdb.conn_accounts()
+    c.execute('UPDATE accounts SET is_admin=1 WHERE id=?', (aid,))
+    c.commit(); c.close()
+    print('Admin créé')
+except: print('Admin existe déjà')
+acc = vdb.get_account_by_email('luc@sharper-media.com')
+print('API key:', acc['api_key'])
+"
+```
+
+---
+
+## 2. Workflow Git quotidien
+
+### Mac
 ```bash
 cd /Users/lucmonteil/Voxa
-git add server.py wsgi.py app_router.py dashboard.py dashboard_betclic.py tracker.py tracker_betclic.py DEPLOY.md
-git commit -m "V2 — unified multi-dashboard, shared Flask server"
+git add <fichiers modifiés>
+git commit -m "description"
 git push
 ```
 
-### B. Pull PythonAnywhere
+### PythonAnywhere
 ```bash
 cd ~/Voxa && git pull
+python3 -c "from wsgi import application; print('WSGI OK')"
+# Puis Reload dans l'onglet Web
 ```
-
-### C. Virtualenv (si pas déjà fait)
-```bash
-workon voxa
-pip install dash dash-bootstrap-components plotly pandas python-dotenv
-```
-
-### D. Configurer le WSGI
-
-Onglet **Web** → clic sur le fichier WSGI → **remplacer TOUT** par :
-
-```python
-import sys
-import os
-from dotenv import load_dotenv
-
-sys.path.insert(0, '/home/lucsharper/Voxa')
-load_dotenv('/home/lucsharper/Voxa/.env')
-
-from wsgi import application
-```
-
-### E. Virtualenv dans l'onglet Web
-
-Vérifier que le champ **Virtualenv** pointe vers :
-```
-/home/lucsharper/.virtualenvs/voxa
-```
-
-### F. Reload → Tester
-
-Clic **Reload** → ouvrir lucsharper.pythonanywhere.com
 
 ---
 
-## 2. Scheduler PythonAnywhere (onglet Tasks)
+## 3. Scheduler PythonAnywhere (onglet Tasks)
 
-| Heure | Commande |
-|-------|----------|
-| 02:00 | `/home/lucsharper/.virtualenvs/voxa/bin/python /home/lucsharper/Voxa/tracker.py` |
-| 02:30 | `/home/lucsharper/.virtualenvs/voxa/bin/python /home/lucsharper/Voxa/tracker_betclic.py` |
-
-Important : utiliser le chemin complet du python du virtualenv.
-
+**Créer le dossier de logs :**
 ```bash
 mkdir -p ~/Voxa/logs
 ```
 
----
+**4 tâches à configurer :**
 
-## 3. Workflow Git quotidien
+| Heure | Fréquence | Commande |
+|-------|-----------|---------|
+| 02:00 | Quotidien | `/home/lucsharper/.virtualenvs/voxa/bin/python /home/lucsharper/Voxa/tracker.py >> /home/lucsharper/Voxa/logs/tracker_psg.log 2>&1` |
+| 02:30 | Quotidien | `/home/lucsharper/.virtualenvs/voxa/bin/python /home/lucsharper/Voxa/tracker_betclic.py >> /home/lucsharper/Voxa/logs/tracker_betclic.log 2>&1` |
+| 03:00 | Quotidien | `/home/lucsharper/.virtualenvs/voxa/bin/python /home/lucsharper/Voxa/voxa_engine.py --all >> /home/lucsharper/Voxa/logs/engine.log 2>&1` |
+| 06:00 | 1er du mois | `/home/lucsharper/.virtualenvs/voxa/bin/python /home/lucsharper/Voxa/email_reporter.py --client all >> /home/lucsharper/Voxa/logs/email.log 2>&1` |
 
+**Important :** toujours utiliser le chemin complet du python du virtualenv.
+
+**Vérifier les logs :**
 ```bash
-# Mac — modifier → push
-cd /Users/lucmonteil/Voxa
-git add -A && git commit -m "description" && git push
-
-# PythonAnywhere — pull → reload
-cd ~/Voxa && git pull
-# Puis Reload dans onglet Web
+tail -50 ~/Voxa/logs/tracker_psg.log
+tail -50 ~/Voxa/logs/tracker_betclic.log
+tail -20 ~/Voxa/logs/engine.log
 ```
 
 ---
 
-## 4. Tests locaux
+## 4. Tests live
 
-```bash
-# Dashboards individuels
-python3 dashboard.py             # http://localhost:8050 (PSG)
-python3 dashboard_betclic.py     # http://localhost:8051 (Betclic)
-python3 app_router.py            # http://localhost:8060 (landing)
-
-# Trackers
-python3 tracker.py --demo
-python3 tracker_betclic.py --demo
-python3 tracker.py --report
-```
-
----
-
-## 5. Ajouter un nouveau client
-
-1. Créer `tracker_nouveauclient.py` et `dashboard_nouveauclient.py`
-2. Dans le dashboard : `url_base_pathname="/nouveauclient/"`
-3. Dans `wsgi.py` ajouter : `import dashboard_nouveauclient`
-4. Dans `app_router.py` ajouter le client au dict `CLIENTS`
-5. Push + pull + Reload
+| URL | Résultat attendu |
+|-----|-----------------|
+| `/health` | JSON scores PSG + Betclic |
+| `/demo` | Formulaire competitive vote |
+| `/login` | Page connexion |
+| `/settings` | Clé API + endpoints |
+| `/psg/` | Dashboard PSG (tab Recommandations) |
+| `/betclic/` | Dashboard Betclic (tab Insights) |
+| `/api/v1/vote?brand=Betclic&vertical=bet` | JSON concurrents |
+| `/api/v1/score?slug=betclic` | 401 sans clé |
 
 ---
 
-## 6. Troubleshooting
+## 5. Coûts infrastructure mensuels
 
-**Dashboard ne charge pas** → onglet Web → Error log
+| Composant | Coût |
+|-----------|------|
+| Claude Haiku (PSG + Betclic trackers) | ~12 € |
+| Claude Haiku (engine recos) | ~2 € |
+| Perplexity (Betclic) | ~30 € |
+| PythonAnywhere Hacker | ~5 € |
+| **TOTAL** | **~49 € / mois** |
 
-**ModuleNotFoundError: No module named 'server'** → vérifier sys.path dans le fichier WSGI
+Marge sur retainer Betclic 4 500€ : **98.9%**
 
-**Données pas à jour** → vérifier les tâches schedulées avec le bon chemin python virtualenv
+---
+
+## 6. Fichiers modifiés vs V1
+
+| Fichier | Statut | Description |
+|---------|--------|-------------|
+| `server.py` | ★ NOUVEAU | Flask partagé — auth, /demo, /settings, /health, API |
+| `voxa_db.py` | ★ NOUVEAU | Lecture DB existantes + voxa_accounts.db |
+| `voxa_engine.py` | ★ NOUVEAU | Competitive vote + alertes + recommandations |
+| `wsgi.py` | MODIFIÉ | Commentaires architecture clarifiés |
+| `app_router.py` | MODIFIÉ | Import server partagé (3 lignes) |
+| `dashboard.py` | MODIFIÉ | Tab Recommandations ajouté |
+| `dashboard_betclic.py` | MODIFIÉ | Tab Insights enrichi (alertes + recos DB) |
+| `tracker.py` | INCHANGÉ | |
+| `tracker_betclic.py` | INCHANGÉ | |
+| `email_reporter.py` | INCHANGÉ | |
+| `voxa.db` | INCHANGÉ | |
+| `voxa_betclic.db` | INCHANGÉ | |
+| `voxa_accounts.db` | ★ NOUVEAU AUTO | Créé au premier démarrage |

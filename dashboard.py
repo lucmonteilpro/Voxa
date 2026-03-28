@@ -620,6 +620,12 @@ app.layout = html.Div([
                                  "textTransform": "uppercase",
                                  "letterSpacing": "0.8px",
                                  "fontFamily": "Syne, sans-serif"}),
+            dbc.Tab(label="Recommandations", tab_id="recommendations",
+                    label_style={"fontSize": 12, "fontWeight": 700,
+                                 "textTransform": "uppercase",
+                                 "letterSpacing": "0.8px",
+                                 "fontFamily": "Syne, sans-serif",
+                                 "color": "#B8962E"}),
             dbc.Tab(label="Bibliothèque prompts", tab_id="library",
                     label_style={"fontSize": 12, "fontWeight": 700,
                                  "textTransform": "uppercase",
@@ -848,6 +854,127 @@ def render_tab(active_tab, lang):
         ], style={"background": "white", "border": "1px solid #e5e7eb",
                   "borderRadius": 12, "padding": 24,
                   "boxShadow": "0 1px 3px rgba(0,0,0,0.06)"})
+
+    elif active_tab == "recommendations":
+        # ── Recommandations depuis voxa_db ──────────────────
+        try:
+            import voxa_db as vdb
+            recos = vdb.get_recommendations("psg")
+            alerts = vdb.get_alerts("psg", unread_only=True)
+        except Exception:
+            recos = []; alerts = []
+
+        # ── Recommandations dynamiques basées sur les données live ──
+        live_recos = []
+        scores_df_r = load_latest_scores(lang)
+        if not scores_df_r.empty:
+            pr = scores_df_r[scores_df_r["brand"] == PRIMARY_BRAND]
+            if not pr.empty:
+                score_val = round(pr["geo_score"].values[0])
+                rank = int(pr.index[0]) + 1
+                n_total = len(scores_df_r)
+                leader = scores_df_r.iloc[0]
+
+                if rank > 1:
+                    delta = round(leader["geo_score"] - pr["geo_score"].values[0])
+                    live_recos.append({
+                        "priority": "haute", "icon": "◎",
+                        "title": f"{PRIMARY_BRAND} #{rank}/{n_total} — {delta} pts derrière {leader['brand']}",
+                        "body": f"{leader['brand']} domine les réponses IA. Analyser les contenus web que les LLMs utilisent pour le citer et produire du contenu équivalent.",
+                    })
+                else:
+                    live_recos.append({
+                        "priority": "info", "icon": "✓",
+                        "title": f"{PRIMARY_BRAND} #1 — position dominante ({score_val}/100)",
+                        "body": "Position de leader confirmée. Maintenir l'avance en produisant du contenu régulier et en renforçant le balisage Schema sur le site officiel.",
+                    })
+
+                if score_val < 50:
+                    live_recos.append({
+                        "priority": "haute", "icon": "⚠",
+                        "title": f"GEO Score faible : {score_val}/100",
+                        "body": "Les LLMs citent peu votre club. Actions prioritaires : page FAQ structurée, Schema SportsEvent sur le site officiel, communiqués de presse réguliers avec Schema Article.",
+                    })
+                elif score_val < 70:
+                    live_recos.append({
+                        "priority": "moyenne", "icon": "◐",
+                        "title": f"GEO Score à améliorer : {score_val}/100",
+                        "body": "Score intermédiaire. Enrichir les pages Résultats et Histoire du club avec du contenu structuré. Ajouter Schema Organization + SportsEvent sur toutes les pages matchs.",
+                    })
+
+        priority_styles = {
+            "haute":   {"border": "#dc2626", "bg": "#fef2f2", "badge_bg": "#fee2e2", "badge_color": "#dc2626"},
+            "moyenne": {"border": "#d97706", "bg": "#fffbeb", "badge_bg": "#fef3c7", "badge_color": "#92400e"},
+            "info":    {"border": "#16a34a", "bg": "#f0fdf4", "badge_bg": "#dcfce7", "badge_color": "#15803d"},
+        }
+
+        def reco_card(reco, is_persistent=False):
+            ps = priority_styles.get(reco.get("priority","info"), priority_styles["info"])
+            impact = reco.get("impact_score") or reco.get("impact", 0)
+            impact_badge = html.Span(f"+{impact:.0f} pts estimés",
+                style={"fontSize": 10, "color": "#9ca3af", "marginLeft": 8}) if impact else None
+            return html.Div([
+                html.Div([
+                    html.Span(reco.get("icon","💡"), style={"fontSize": 16, "marginRight": 8}),
+                    html.Span(reco.get("priority","info").upper(), style={
+                        "fontSize": 9, "fontWeight": 800, "letterSpacing": "1.5px",
+                        "padding": "2px 8px", "borderRadius": 20,
+                        "background": ps["badge_bg"], "color": ps["badge_color"],
+                        "marginRight": 8}),
+                    html.Span(reco.get("title",""), style={
+                        "fontSize": 13, "fontWeight": 700, "color": "#111827"}),
+                    *([impact_badge] if impact_badge else []),
+                ], style={"marginBottom": 6}),
+                html.Div(reco.get("body",""), style={
+                    "fontSize": 12, "color": "#4b5563", "lineHeight": "1.7",
+                    "paddingLeft": 24}),
+                *([html.Div(f"Prompt : « {reco['prompt_text'][:80]}… »", style={
+                    "fontSize": 10, "color": "#9ca3af", "marginTop": 4, "paddingLeft": 24,
+                    "fontStyle": "italic"}) if reco.get("prompt_text") else html.Div()]),
+            ], style={
+                "borderLeft": f"3px solid {ps['border']}",
+                "background": ps["bg"],
+                "borderRadius": "0 10px 10px 0",
+                "padding": "14px 18px", "marginBottom": 10,
+            })
+
+        # Alertes actives
+        alert_section = html.Div()
+        if alerts:
+            alert_items = [html.Div([
+                html.Span({"critical":"🔴","warning":"🟡","info":"🟢"}.get(a.get("severity","info"),"🟢"),
+                          style={"marginRight": 6}),
+                html.Strong(a["title"]), f" — {a['body']}",
+                html.Span(f"  {a['created_at'][:10]}", style={"fontSize":10,"color":"#9ca3af","marginLeft":8}),
+            ], style={"fontSize":12,"padding":"8px 12px","marginBottom":6,
+                      "background":"#fffbeb","borderRadius":8,"borderLeft":"3px solid #d97706"})
+            for a in alerts]
+            alert_section = html.Div([
+                html.Div("ALERTES ACTIVES", style={"fontSize":10,"fontWeight":700,
+                    "letterSpacing":"1.5px","color":"#9ca3af","marginBottom":10}),
+                *alert_items,
+            ], style={"marginBottom":20})
+
+        all_recos = live_recos + [
+            {"priority": r.get("priority","medium"), "icon": "💡",
+             "title": r.get("title",""), "body": r.get("body",""),
+             "prompt_text": r.get("prompt_text"), "impact_score": r.get("impact_score")}
+            for r in recos
+        ]
+        if not all_recos:
+            all_recos = [{"priority":"info","icon":"✓",
+                          "title":"Bonne performance globale",
+                          "body":"Aucune alerte critique détectée. Continuez le monitoring hebdomadaire pour détecter les variations."}]
+
+        return html.Div([
+            alert_section,
+            html.Div("RECOMMANDATIONS", style={"fontSize":10,"fontWeight":700,
+                "letterSpacing":"1.5px","color":"#9ca3af","marginBottom":10}),
+            *[reco_card(r) for r in all_recos],
+            html.Div("Les recommandations sont générées automatiquement après chaque run. Relancez un tracker pour actualiser.",
+                style={"fontSize":11,"color":"#9ca3af","marginTop":16,"fontStyle":"italic"}),
+        ], style={"background":"white","border":"1px solid #e5e7eb",
+                  "borderRadius":12,"padding":24,"boxShadow":"0 1px 3px rgba(0,0,0,0.06)"})
 
     elif active_tab == "about":
         about_items = [

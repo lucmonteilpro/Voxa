@@ -118,9 +118,11 @@ def topbar(show_right=True):
     if show_right and current_user.is_authenticated:
         right = f"""<div style="display:flex;align-items:center;gap:12px;font-size:13px">
           <span style="color:{T3}">👋 {current_user.name.split()[0]}</span>
-          <a href="/psg/" class="bo">PSG</a>
-          <a href="/betclic/" class="bo">Betclic</a>
-          <a href="/logout" class="bo" style="color:{RED}">Déconnexion</a>
+          <a href="/psg/" style="color:{T2};font-weight:500">PSG</a>
+          <a href="/betclic/" style="color:{T2};font-weight:500">Betclic</a>
+          <a href="/demo" style="color:{T2};font-weight:500">Demo</a>
+          <a href="/settings" style="color:{T2};font-weight:500">⚙ Paramètres</a>
+          <a href="/logout" class="bo" style="color:{RED};padding:5px 12px;font-size:12px">Déconnexion</a>
         </div>"""
     elif show_right:
         right = f"""<div style="display:flex;align-items:center;gap:10px">
@@ -585,6 +587,117 @@ def health():
         "timestamp": datetime.utcnow().isoformat(),
         **vdb.status(),
     })
+
+
+# ── SETTINGS ─────────────────────────────────────────────────
+
+@server.route("/settings")
+@login_required
+def settings():
+    acc = vdb.get_account_by_id(current_user.id)
+    api_key = acc["api_key"] if acc else "—"
+
+    endpoints = [
+        ("GET", "/api/v1/vote?brand=Betclic&vertical=bet", "Public — aucune clé requise"),
+        ("GET", "/api/v1/score?slug=betclic",              "Score + NSS + concurrents"),
+        ("GET", "/api/v1/benchmark",                       "Comparatif tous clients"),
+        ("GET", "/api/v1/history?slug=psg&weeks=12",       "Historique GEO Score"),
+    ]
+
+    rows_ep = "".join(
+        f'<tr style="border-bottom:1px solid {BD}">'
+        f'<td style="padding:8px 12px;font-size:11px;font-weight:700;color:#4F46E5;font-family:monospace">{m}</td>'
+        f'<td style="padding:8px 12px;font-size:12px;font-family:monospace;color:{N}">{ep}</td>'
+        f'<td style="padding:8px 12px;font-size:11px;color:{T3}">{desc}</td>'
+        f'</tr>'
+        for m, ep, desc in endpoints
+    )
+
+    body = f"""
+    <div style="margin-bottom:28px">
+      <div class="lbl" style="margin-bottom:6px">PARAMÈTRES</div>
+      <div class="h1">Votre compte</div>
+    </div>
+
+    <!-- Compte -->
+    <div class="card" style="margin-bottom:18px">
+      <div style="padding:20px 24px;border-bottom:1px solid {BD}">
+        <div class="lbl" style="margin-bottom:12px">INFORMATIONS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div>
+            <div style="font-size:11px;color:{T3};margin-bottom:3px">Nom</div>
+            <div style="font-weight:600;color:{N}">{current_user.name}</div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:{T3};margin-bottom:3px">Email</div>
+            <div style="font-weight:600;color:{N}">{current_user.email}</div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:{T3};margin-bottom:3px">Plan</div>
+            <div style="display:inline-block;background:#EEF2FF;color:#4F46E5;
+                 font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px">
+              {current_user.plan.upper()}
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:{T3};margin-bottom:3px">Accès dashboards</div>
+            <div style="display:flex;gap:8px">
+              <a href="/psg/" style="font-size:12px;font-weight:600;color:{N};
+                   background:{BD};padding:4px 10px;border-radius:6px">PSG →</a>
+              <a href="/betclic/" style="font-size:12px;font-weight:600;color:{N};
+                   background:{BD};padding:4px 10px;border-radius:6px">Betclic →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Clé API -->
+    <div class="card" style="margin-bottom:18px">
+      <div style="padding:20px 24px">
+        <div class="lbl" style="margin-bottom:12px">CLÉ API</div>
+        <div style="background:{BG};border:1px solid {BD};border-radius:8px;
+             padding:12px 16px;font-family:monospace;font-size:13px;
+             color:{N};word-break:break-all;margin-bottom:8px;
+             display:flex;justify-content:space-between;align-items:center">
+          <span id="apikey">{api_key}</span>
+          <button onclick="navigator.clipboard.writeText('{api_key}');this.textContent='✓ Copié!';setTimeout(()=>this.textContent='Copier',2000)"
+                  style="border:none;background:{G};color:white;padding:5px 12px;
+                         border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;
+                         flex-shrink:0;margin-left:12px">Copier</button>
+        </div>
+        <div style="font-size:11px;color:{T3}">
+          Header : <code style="background:{BG};padding:2px 6px;border-radius:4px">X-API-Key: {api_key[:20]}...</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- API Endpoints -->
+    <div class="card">
+      <div style="padding:20px 24px">
+        <div class="lbl" style="margin-bottom:12px">ENDPOINTS API</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="border-bottom:2px solid {BD}">
+              <th style="text-align:left;padding:6px 12px;font-size:10px;font-weight:700;
+                   letter-spacing:1px;text-transform:uppercase;color:{T3}">Méthode</th>
+              <th style="text-align:left;padding:6px 12px;font-size:10px;font-weight:700;
+                   letter-spacing:1px;text-transform:uppercase;color:{T3}">Endpoint</th>
+              <th style="text-align:left;padding:6px 12px;font-size:10px;font-weight:700;
+                   letter-spacing:1px;text-transform:uppercase;color:{T3}">Description</th>
+            </tr>
+          </thead>
+          <tbody>{rows_ep}</tbody>
+        </table>
+        <div style="margin-top:14px;padding:12px 16px;background:{BG};
+             border-radius:8px;font-size:12px;color:{T2}">
+          <strong>Exemple curl :</strong><br>
+          <code style="font-size:11px">curl -H "X-API-Key: {api_key[:20]}..." https://lucsharper.pythonanywhere.com/api/v1/score?slug=betclic</code>
+        </div>
+      </div>
+    </div>"""
+
+    return pg_wide("Paramètres", body)
 
 
 # ── ENTRY POINT (test local uniquement) ─────────────────────

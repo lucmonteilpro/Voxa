@@ -1049,13 +1049,84 @@ def render_tab(active_tab, market, cat, llm):
                 html.Tbody(rows),
             ], bordered=False, hover=True, style={"fontFamily": "Syne, sans-serif"})
 
+        # ── Recommandations persistantes depuis voxa_db ──────
+        try:
+            import voxa_db as vdb
+            db_recos = vdb.get_recommendations("betclic")
+            db_alerts = vdb.get_alerts("betclic", unread_only=True)
+        except Exception:
+            db_recos = []; db_alerts = []
+
+        # Alertes actives
+        alert_section = html.Div()
+        if db_alerts:
+            alert_items = [html.Div([
+                html.Span({"critical":"🔴","warning":"🟡","info":"🟢"}.get(a.get("severity","info"),"🟢"),
+                          style={"marginRight": 6}),
+                html.Strong(a["title"]), f" — {a['body']}",
+                html.Span(f"  {a['created_at'][:10]}", style={"fontSize":10,"color":"#9ca3af","marginLeft":8}),
+            ], style={"fontSize":12,"padding":"8px 12px","marginBottom":6,
+                      "background":"#fffbeb","borderRadius":8,"borderLeft":"3px solid #d97706"})
+            for a in db_alerts]
+            alert_section = card([
+                card_title("ALERTES ACTIVES"),
+                html.Div(alert_items),
+            ])
+
+        # Recos persistantes
+        db_reco_cards = []
+        for r in db_recos:
+            pr_map = {"high":"haute","medium":"moyenne","low":"info"}
+            prio = pr_map.get(r.get("priority","medium"), "moyenne")
+            ps = priority_styles.get(prio, priority_styles["moyenne"])
+            impact = r.get("impact_score", 0)
+            db_reco_cards.append(html.Div([
+                html.Div([
+                    html.Span("💡", style={"fontSize": 16, "marginRight": 8}),
+                    html.Span(prio.upper(), style={
+                        "fontSize": 9, "fontWeight": 800, "letterSpacing": "1.5px",
+                        "padding": "2px 8px", "borderRadius": 20,
+                        "background": ps["badge_bg"], "color": ps["badge_color"],
+                        "marginRight": 8}),
+                    html.Span(r.get("title",""), style={
+                        "fontSize": 13, "fontWeight": 700, "color": "#111827"}),
+                    *([ html.Span(f"+{impact:.0f} pts estimés",
+                        style={"fontSize":10,"color":"#9ca3af","marginLeft":8})] if impact else []),
+                ], style={"marginBottom": 6}),
+                html.Div(r.get("body",""), style={
+                    "fontSize": 12, "color": "#4b5563", "lineHeight": "1.7",
+                    "paddingLeft": 24}),
+                *([ html.Div(f"Prompt : « {r['prompt_text'][:80]}… »",
+                    style={"fontSize":10,"color":"#9ca3af","marginTop":4,
+                           "paddingLeft":24,"fontStyle":"italic"})
+                   ] if r.get("prompt_text") else []),
+            ], style={
+                "borderLeft": f"3px solid {ps['border']}",
+                "background": ps["bg"],
+                "borderRadius": "0 10px 10px 0",
+                "padding": "14px 18px", "marginBottom": 10,
+            }))
+
+        db_section = html.Div()
+        if db_reco_cards:
+            db_section = dbc.Row([
+                dbc.Col(card([
+                    card_title("RECOMMANDATIONS GEO — ACTIONS PRIORITAIRES"),
+                    html.Div(db_reco_cards),
+                    html.Div("Générées automatiquement après chaque run tracker.",
+                        style={"fontSize":11,"color":"#9ca3af","marginTop":12,"fontStyle":"italic"}),
+                ]), width=12),
+            ], className="mb-4")
+
         return html.Div([
+            alert_section,
             dbc.Row([
                 dbc.Col(card([
                     card_title(f"Recommandations · {MARKETS.get(market, market)}"),
                     html.Div(reco_cards),
                 ]), width=12),
             ], className="mb-4"),
+            db_section,
             dbc.Row([
                 dbc.Col(card([
                     card_title(f"Gap Analysis · Betclic vs concurrents · {MARKETS.get(market, market)}"),
