@@ -24,6 +24,10 @@ import sys
 import argparse
 import sqlite3
 from datetime import date, datetime
+import theme as T
+from theme import P, C1, C2, NG, BG, BG3, BD, W, T2, T3, RED, GRD
+from theme import LOGO_ICON_DASH, LOGO_TEXT_STYLE, LOGO_TAG_STYLE
+from theme import card_style, card_title_style, score_color, FONTS_URL, DASH_CSS
 
 import dash
 import dash_bootstrap_components as dbc
@@ -33,19 +37,24 @@ from dash import html, dcc, Input, Output, State, callback
 # CONFIG
 # ─────────────────────────────────────────────
 
-FONT = "https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&display=swap"
+FONT = FONTS_URL  # depuis theme.py
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Palette depuis theme.py
 C = {
-    "navy":   "#0B1D3A",
-    "gold":   "#B8962E",
-    "goldL":  "#F5EDD5",
-    "white":  "#FFFFFF",
-    "bg":     "#F4F5F9",
-    "border": "#E5E7EB",
-    "text2":  "#4B5563",
-    "text3":  "#9CA3AF",
-    "green":  "#16A34A",
+    "navy":   T.N,
+    "c1":     T.C1,
+    "c2":     T.C2,
+    "ng":     T.NG,
+    "bg":     T.BG,
+    "bg2":    T.BG2,
+    "bg3":    T.BG3,
+    "white":  T.W,
+    "border": T.BD,
+    "text2":  T.T2,
+    "text3":  T.T3,
+    "green":  T.NG,
+    "red":    T.RED,
 }
 
 # Clients disponibles
@@ -138,7 +147,7 @@ app = dash.Dash(
 
 def score_color(s):
     if s is None: return C["text3"]
-    if s >= 70:   return C["green"]
+    if s >= 70:   return C["ng"]
     if s >= 45:   return "#D97706"
     return "#DC2626"
 
@@ -182,7 +191,7 @@ def client_card(key: str) -> html.Div:
                 html.Div(style={"width": 1, "background": C["border"], "margin": "0 20px"}),
                 html.Div([
                     html.Span(str(n), style={
-                        "fontSize": 28, "fontWeight": 800, "color": C["navy"], "lineHeight": "1",
+                        "fontSize": 28, "fontWeight": 800, "color": C["white"], "lineHeight": "1",
                     }),
                     html.Div("Runs total", style={
                         "fontSize": 10, "color": C["text3"], "fontWeight": 700,
@@ -192,7 +201,7 @@ def client_card(key: str) -> html.Div:
                 html.Div(style={"width": 1, "background": C["border"], "margin": "0 20px"}),
                 html.Div([
                     html.Span(last, style={
-                        "fontSize": 13, "fontWeight": 700, "color": C["navy"], "lineHeight": "1.2",
+                        "fontSize": 13, "fontWeight": 700, "color": C["white"], "lineHeight": "1.2",
                     }),
                     html.Div("Dernier run", style={
                         "fontSize": 10, "color": C["text3"], "fontWeight": 700,
@@ -213,7 +222,7 @@ def client_card(key: str) -> html.Div:
     ], style={
         "border": f"1px solid {C['border']}", "borderRadius": 12,
         "boxShadow": "0 2px 8px rgba(0,0,0,0.07)",
-        "background": C["white"], "marginBottom": 20,
+        "background": C["bg3"], "marginBottom": 20,
     })
 
 
@@ -224,32 +233,39 @@ def client_card(key: str) -> html.Div:
 def landing_layout():
     today = date.today().strftime("%-d %B %Y")
     return html.Div([
-        # Topbar
+        # Topbar dark
         html.Div([
             html.Div([
                 html.Div("V", style={
-                    "width": 34, "height": 34, "background": C["gold"],
+                    "width": 32, "height": 32,
+                    "background": "linear-gradient(135deg,#00E5FF,#7B4DFF)",
                     "borderRadius": 8, "display": "flex",
                     "alignItems": "center", "justifyContent": "center",
-                    "fontSize": 16, "fontWeight": 800, "color": C["navy"], "flexShrink": 0,
+                    "fontSize": 15, "fontWeight": 900,
+                    "color": T.BG, "flexShrink": 0,
+                    "boxShadow": "0 0 12px rgba(0,229,255,0.4)",
                 }),
                 html.Span("voxa", style={
-                    "fontWeight": 800, "fontSize": 20, "letterSpacing": "-0.5px",
-                    "color": C["navy"],
+                    "fontWeight": 800, "fontSize": 18, "letterSpacing": "-0.5px",
+                    "background": "linear-gradient(135deg,#00E5FF,#7B4DFF)",
+                    "WebkitBackgroundClip": "text", "WebkitTextFillColor": "transparent",
                 }),
-                html.Span("GEO Intelligence", style={
-                    "fontSize": 9, "fontWeight": 700, "letterSpacing": "1.5px",
+                html.Span("GEO INTELLIGENCE", style={
+                    "fontSize": 8, "fontWeight": 700, "letterSpacing": "2px",
                     "textTransform": "uppercase", "padding": "3px 9px",
-                    "borderRadius": 20, "background": "#EEF2FF", "color": "#4F46E5",
+                    "borderRadius": 20, "background": "rgba(0,229,255,0.1)",
+                    "color": T.C1, "border": f"1px solid rgba(0,229,255,0.2)",
                 }),
             ], style={"display": "flex", "alignItems": "center", "gap": 10}),
             html.Div(today, style={"fontSize": 12, "color": C["text3"]}),
         ], style={
             "display": "flex", "alignItems": "center", "justifyContent": "space-between",
             "height": 56, "padding": "0 32px",
-            "background": C["white"], "borderBottom": f"1px solid {C['border']}",
+            "background": "rgba(13,17,23,0.95)",
+            "borderBottom": f"1px solid {C['border']}",
+            "backdropFilter": "blur(12px)",
             "position": "sticky", "top": 0, "zIndex": 100,
-            "fontFamily": "Syne, sans-serif",
+            "fontFamily": "Inter, sans-serif",
         }),
 
         # Content
@@ -260,7 +276,7 @@ def landing_layout():
                     "letterSpacing": "3px", "marginBottom": 8,
                 }),
                 html.Div("Choisissez un client", style={
-                    "fontSize": 28, "fontWeight": 800, "color": C["navy"],
+                    "fontSize": 28, "fontWeight": 800, "color": C["white"],
                     "marginBottom": 4, "letterSpacing": "-0.5px",
                 }),
                 html.Div(
@@ -282,9 +298,9 @@ def landing_layout():
                         ]
                     ], style={
                         "display": "flex", "flexDirection": "column", "gap": 6,
-                        "background": C["goldL"], "borderRadius": 10,
+                        "background": "rgba(0,229,255,0.06)", "borderRadius": 10,
                         "padding": "12px 16px", "marginBottom": 28,
-                        "borderLeft": f"3px solid {C['gold']}",
+                        "borderLeft": "3px solid #00E5FF",
                     }),
                 ]),
 
@@ -301,25 +317,25 @@ def landing_layout():
                     html.Div([
                         html.A("📋 Rapport PSG PDF", href="/report/psg", style={
                             "padding": "8px 16px", "borderRadius": 8,
-                            "border": f"1px solid {C['border']}", "background": C["white"],
-                            "fontSize": 12, "fontWeight": 600, "color": C["navy"],
+                            "border": f"1px solid {C['border']}", "background": C["bg3"],
+                            "fontSize": 12, "fontWeight": 600, "color": C["white"],
                             "textDecoration": "none",
                         }),
                         html.A("📋 Rapport Betclic PDF", href="/report/betclic", style={
                             "padding": "8px 16px", "borderRadius": 8,
-                            "border": f"1px solid {C['border']}", "background": C["white"],
-                            "fontSize": 12, "fontWeight": 600, "color": C["navy"],
+                            "border": f"1px solid {C['border']}", "background": C["bg3"],
+                            "fontSize": 12, "fontWeight": 600, "color": C["white"],
                             "textDecoration": "none",
                         }),
                         html.A("🏥 Healthcheck", href="/health", style={
                             "padding": "8px 16px", "borderRadius": 8,
-                            "border": f"1px solid {C['border']}", "background": C["white"],
+                            "border": f"1px solid {C['border']}", "background": C["bg3"],
                             "fontSize": 12, "fontWeight": 600, "color": C["text3"],
                             "textDecoration": "none",
                         }),
                     ], style={"display": "flex", "gap": 12, "flexWrap": "wrap"}),
                 ], style={
-                    "background": C["white"], "border": f"1px solid {C['border']}",
+                    "background": C["bg3"], "border": f"1px solid {C['border']}",
                     "borderRadius": 12, "padding": "16px 20px",
                 }),
 

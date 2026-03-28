@@ -80,12 +80,15 @@ BRAND_ALIASES = {
     "LV BET":          ["LV BET", "LVBET", "LVbet"],
 }
 
-# Multi-provider — hashé pour V2
+# Multi-provider — activé si les clés API sont présentes dans .env
+OPENAI_API_KEY     = os.getenv("OPENAI_API_KEY", "")
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
+
 PROVIDERS = {
-    "claude": {"model": MODEL, "enabled": True},
-    # "openai":     {"model": "gpt-4o-mini",                          "enabled": False},
-    # "gemini":     {"model": "gemini-1.5-flash",                     "enabled": False},
-    # "perplexity": {"model": "llama-3.1-sonar-small-128k-online",    "enabled": False},
+    "claude":     {"model": MODEL, "enabled": bool(API_KEY)},
+    "openai":     {"model": "gpt-4o-mini",  "enabled": bool(OPENAI_API_KEY)},
+    "perplexity": {"model": "sonar",         "enabled": bool(PERPLEXITY_API_KEY)},
+    # "gemini":   {"model": "gemini-1.5-flash", "enabled": False},
 }
 
 # ─────────────────────────────────────────────
@@ -455,6 +458,66 @@ def call_claude(prompt_text: str, language: str, max_retries: int = 3) -> str | 
             print(f"  [Tentative {attempt}] {e}")
             if attempt < max_retries:
                 time.sleep(2 ** attempt)
+    return None
+
+
+def call_openai(prompt_text: str, language: str, max_retries: int = 3) -> str | None:
+    """Appel OpenAI API (GPT-4o-mini). Activé si OPENAI_API_KEY présente dans .env."""
+    if not OPENAI_API_KEY:
+        return None
+    import urllib.request, urllib.error
+    system = SYSTEM_PROMPTS.get(language, SYSTEM_PROMPTS["fr"])
+    payload = json.dumps({
+        "model": PROVIDERS["openai"]["model"], "max_tokens": 400,
+        "messages": [{"role":"system","content":system},{"role":"user","content":prompt_text}],
+    }).encode("utf-8")
+    headers = {"Content-Type":"application/json","Authorization":f"Bearer {OPENAI_API_KEY}"}
+    for attempt in range(1, max_retries+1):
+        try:
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/chat/completions",
+                data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read().decode())["choices"][0]["message"]["content"]
+        except urllib.error.HTTPError as e:
+            if e.code in (401,403): print("  [SKIP] Clé OpenAI invalide."); return None
+            if attempt < max_retries: time.sleep(2**attempt)
+        except Exception as ex:
+            if attempt < max_retries: time.sleep(2**attempt)
+    return None
+
+
+def call_perplexity(prompt_text: str, language: str, max_retries: int = 3) -> str | None:
+    """Appel Perplexity API (Sonar). Activé si PERPLEXITY_API_KEY présente dans .env."""
+    if not PERPLEXITY_API_KEY:
+        return None
+    import urllib.request, urllib.error
+    system = SYSTEM_PROMPTS.get(language, SYSTEM_PROMPTS["fr"])
+    payload = json.dumps({
+        "model": PROVIDERS["perplexity"]["model"], "max_tokens": 400,
+        "messages": [{"role":"system","content":system},{"role":"user","content":prompt_text}],
+    }).encode("utf-8")
+    headers = {"Content-Type":"application/json","Authorization":f"Bearer {PERPLEXITY_API_KEY}"}
+    for attempt in range(1, max_retries+1):
+        try:
+            req = urllib.request.Request(
+                "https://api.perplexity.ai/chat/completions",
+                data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                return json.loads(resp.read().decode())["choices"][0]["message"]["content"]
+        except urllib.error.HTTPError as e:
+            if e.code in (401,403): print("  [SKIP] Clé Perplexity invalide."); return None
+            if attempt < max_retries: time.sleep(2**attempt)
+        except Exception as ex:
+            if attempt < max_retries: time.sleep(2**attempt)
+    return None
+
+
+def call_llm(provider: str, prompt_text: str, language: str) -> str | None:
+    """Dispatcher — appelle le bon LLM selon le provider."""
+    if provider == "claude":     return call_claude(prompt_text, language)
+    elif provider == "openai":   return call_openai(prompt_text, language)
+    elif provider == "perplexity": return call_perplexity(prompt_text, language)
     return None
 
 

@@ -18,6 +18,12 @@ import dash
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, callback
 
+import theme as T
+from theme import (P, C1, C2, NG, BG, BG3, BD, W, T2, T3, RED, GRD,
+                   FONTS_URL, DASH_CSS, score_color, score_label,
+                   card_style, card_title_style, kpi_value_style,
+                   badge_style, BRAND_COLORS_PSG)
+
 # ─────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────
@@ -79,7 +85,7 @@ CATEGORY_LABELS = {
     "reputation":    "Réputation",
 }
 
-FONTS = "https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap"
+FONTS = FONTS_URL  # depuis theme.py
 
 # ─────────────────────────────────────────────
 # DB HELPERS
@@ -1070,35 +1076,7 @@ def export_csv_psg():
 # CUSTOM CSS
 # ─────────────────────────────────────────────
 
-app.index_string = app.index_string.replace(
-    "</head>",
-    """<style>
-    body { font-family: 'Syne', sans-serif !important; }
-    .card-title-voxa {
-        font-size: 11px; font-weight: 700; text-transform: uppercase;
-        letter-spacing: 1.5px; color: #9ca3af; margin-bottom: 16px;
-    }
-    .nav-tabs .nav-link {
-        color: #9ca3af !important;
-        border: none !important;
-        border-bottom: 2px solid transparent !important;
-        font-family: 'Syne', sans-serif;
-    }
-    .nav-tabs .nav-link.active {
-        color: #4f46e5 !important;
-        border-bottom: 2px solid #4f46e5 !important;
-        background: transparent !important;
-    }
-    .nav-tabs { border-bottom: 1px solid #e5e7eb !important; }
-    .Select-control { font-family: 'Syne', sans-serif !important; }
-    .voxa-footer {
-        background: #F5EDD5; border-top: 1px solid #E5D9B6;
-        padding: 12px 32px; font-size: 11px; color: #7C5B1A;
-        display: flex; justify-content: space-between; align-items: center;
-        font-family: 'Syne', sans-serif;
-    }
-    </style></head>"""
-)
+app.index_string = app.index_string.replace("</head>", T.DASH_CSS + "</head>")
 
 # Footer moat — ajouté dans le layout
 app.layout.children.append(
