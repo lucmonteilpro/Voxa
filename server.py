@@ -30,6 +30,11 @@ load_dotenv()
 BASE_DIR = Path(__file__).parent.resolve()
 
 import voxa_db as vdb
+import theme as T
+from theme import (P, N, C1, C2, NG, BG, BG2, BG3, BD, BD2,
+                   W, T2, T3, RED, GRN, GRD,
+                   CSS_FLASK as CSS, LOGO_SVG, FONTS_URL,
+                   score_color as sc, score_label)
 
 # ── Flask setup ──────────────────────────────────────────────
 server = Flask(__name__)
@@ -40,112 +45,58 @@ lm = LoginManager(server)
 lm.login_view    = "login"
 lm.login_message = "Connectez-vous pour accéder à votre espace."
 
-# ── Palette ──────────────────────────────────────────────────
-N="#0B1D3A"; G="#B8962E"; GL="#F5EDD5"; BG="#F4F5F9"
-W="#FFFFFF"; BD="#E5E7EB"; T2="#4B5563"; T3="#9CA3AF"
-GRN="#16A34A"; RED="#DC2626"
-
 MODEL_H = "claude-haiku-4-5-20251001"
 
-def sc(s):
-    if s is None: return T3
-    return GRN if s >= 70 else ("#D97706" if s >= 45 else RED)
-
-# ── User model ───────────────────────────────────────────────
+# ── User model (Flask-Login) ──────────────────────────────────
 class User(UserMixin):
-    def __init__(self, d):
+    def __init__(self, d: dict):
         self.id       = d["id"]
         self.email    = d["email"]
         self.name     = d["name"]
-        self.plan     = d["plan"]
+        self.plan     = d.get("plan", "trial")
         self.is_admin = bool(d.get("is_admin", 0))
         self.api_key  = d.get("api_key", "")
 
 @lm.user_loader
-def load_user(uid):
+def load_user(uid: str):
     d = vdb.get_account_by_id(int(uid))
     return User(d) if d else None
-
-# ── CSS minimal (pages auth/demo uniquement) ─────────────────
-CSS = f"""
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{font-family:'Inter',system-ui,sans-serif;background:{BG};color:#111}}
-.tb{{height:52px;background:{W};border-bottom:1px solid {BD};
-     display:flex;align-items:center;justify-content:space-between;padding:0 24px}}
-.logo{{display:flex;align-items:center;gap:8px;text-decoration:none;color:{N}}}
-.lb{{width:28px;height:28px;background:{G};border-radius:7px;
-     display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:{N}}}
-.ln{{font-weight:800;font-size:16px;letter-spacing:-.5px}}
-.card{{background:{W};border:1px solid {BD};border-radius:12px;padding:28px;
-       box-shadow:0 1px 4px rgba(0,0,0,.06)}}
-.h1{{font-size:22px;font-weight:800;color:{N};margin-bottom:6px}}
-.lbl{{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:{T3}}}
-.fi{{width:100%;padding:9px 13px;border:1px solid {BD};border-radius:8px;
-     font-size:14px;color:#111;outline:none;font-family:inherit;margin-bottom:12px}}
-.fi:focus{{border-color:{N}}}
-.fs{{width:100%;padding:9px 13px;border:1px solid {BD};border-radius:8px;
-     font-size:14px;background:{W};font-family:inherit;outline:none;margin-bottom:12px}}
-.btn{{display:inline-flex;align-items:center;justify-content:center;
-      padding:10px 20px;border-radius:8px;font-size:14px;font-weight:600;
-      cursor:pointer;border:none;width:100%;transition:opacity .15s;text-decoration:none}}
-.btn:hover{{opacity:.85}}
-.bp{{background:{N};color:{W}}}
-.bg2{{background:{G};color:{W}}}
-.bo{{background:transparent;color:{N};border:1px solid {BD};width:auto;padding:7px 14px}}
-.ae{{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px}}
-.ae.err{{background:#FEE2E2;color:#991B1B}}
-.ae.ok{{background:#DCFCE7;color:#166534}}
-.ae.inf{{background:{GL};color:#7C5B1A}}
-.kc{{background:{W};border:1px solid {BD};border-radius:10px;padding:16px;text-align:center}}
-.kv{{font-size:30px;font-weight:800;line-height:1;margin-bottom:4px}}
-.kl{{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:{T3}}}
-.dv{{border:none;border-top:1px solid {BD};margin:16px 0}}
-.tag{{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700}}
-.ts{{background:#EEF2FF;color:#4F46E5}}
-.tb2{{background:#FEF3C7;color:#92400E}}
-.tp{{background:#FCE7F3;color:#831843}}
-.g2{{display:grid;grid-template-columns:1fr 1fr;gap:14px}}
-.g4{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}}
-.sbar{{height:7px;background:{BD};border-radius:4px;overflow:hidden}}
-.sbari{{height:100%;border-radius:4px}}
-@media(max-width:600px){{.g2,.g4{{grid-template-columns:1fr 1fr}}}}
-</style>"""
 
 def topbar(show_right=True):
     right = ""
     if show_right and current_user.is_authenticated:
-        right = f"""<div style="display:flex;align-items:center;gap:12px;font-size:13px">
-          <span style="color:{T3}">👋 {current_user.name.split()[0]}</span>
-          <a href="/psg/" style="color:{T2};font-weight:500">PSG</a>
+        right = f'''<div style="display:flex;align-items:center;gap:14px;font-size:13px">
+          <span style="color:{T3};font-size:12px">👋 {current_user.name.split()[0]}</span>
+          <a href="/psg/"     style="color:{T2};font-weight:500">PSG</a>
           <a href="/betclic/" style="color:{T2};font-weight:500">Betclic</a>
-          <a href="/demo" style="color:{T2};font-weight:500">Demo</a>
-          <a href="/settings" style="color:{T2};font-weight:500">⚙ Paramètres</a>
-          <a href="/logout" class="bo" style="color:{RED};padding:5px 12px;font-size:12px">Déconnexion</a>
-        </div>"""
+          <a href="/demo"     style="color:{T2};font-weight:500">Demo</a>
+          <a href="/settings" style="color:{T2};font-weight:500">⚙</a>
+          <a href="/logout" class="btn bo bsm" style="color:{RED};border-color:rgba(255,75,110,.3)">Déconnexion</a>
+        </div>'''
     elif show_right:
-        right = f"""<div style="display:flex;align-items:center;gap:10px">
-          <a href="/demo" style="font-size:13px;color:{T2};">Demo live</a>
-          <a href="/login" style="font-size:13px;color:{T2};">Connexion</a>
-          <a href="/register" class="btn bg2" style="width:auto;padding:7px 14px;font-size:12px">Démarrer →</a>
-        </div>"""
-    return f"""<header class="tb">
-      <a href="/" class="logo"><div class="lb">V</div><span class="ln">voxa</span></a>
-      {right}</header>"""
+        right = f'''<div style="display:flex;align-items:center;gap:12px">
+          <a href="/demo"         style="font-size:13px;color:{T2};font-weight:500">Demo live</a>
+          <a href="/login"        style="font-size:13px;color:{T2};font-weight:500">Connexion</a>
+          <a href="/contact-form" class="btn bg2 bsm">Audit gratuit →</a>
+        </div>'''
+    return f'''<header class="tb">
+      <a href="/" class="logo">{LOGO_SVG}
+        <span class="logo-text">voxa</span>
+        <span class="logo-tag">GEO INTELLIGENCE</span>
+      </a>{right}</header>'''
 
 def pg(title, body):
     return f"""<!DOCTYPE html><html lang="fr"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title} · Voxa</title>{CSS}</head><body>
-{topbar()}<div style="padding:32px;max-width:480px;margin:0 auto">{body}</div>
+{topbar()}<div style="padding:40px 24px;max-width:480px;margin:0 auto">{body}</div>
 </body></html>"""
 
 def pg_wide(title, body):
     return f"""<!DOCTYPE html><html lang="fr"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title} · Voxa</title>{CSS}</head><body>
-{topbar()}<div style="padding:32px;max-width:900px;margin:0 auto">{body}</div>
+{topbar()}<div style="padding:40px 24px;max-width:960px;margin:0 auto">{body}</div>
 </body></html>"""
 
 # ── AUTH ROUTES ──────────────────────────────────────────────
@@ -182,7 +133,7 @@ def login():
       </form>
       <hr class="dv">
       <div style="text-align:center;font-size:13px;color:{T3}">
-        Pas de compte ? <a href="/register" style="color:{G};font-weight:600">Démarrer gratuitement</a>
+        Pas de compte ? <a href="/register" style="color:{C1};font-weight:600">Démarrer gratuitement</a>
       </div>
     </div>"""
     return pg("Connexion", body)
@@ -222,7 +173,7 @@ def register():
         <button type="submit" class="btn bg2" style="margin-top:4px">Créer mon compte →</button>
       </form>
       <div style="text-align:center;font-size:13px;color:{T3};margin-top:14px">
-        Déjà un compte ? <a href="/login" style="color:{G};font-weight:600">Se connecter</a>
+        Déjà un compte ? <a href="/login" style="color:{C1};font-weight:600">Se connecter</a>
       </div>
     </div>"""
     return pg("Créer un compte", body)
@@ -348,7 +299,7 @@ def contact():
             "Rapport PDF complet (25 pages)",
         ])}
       </div>
-      <a href="/demo" style="font-size:13px;color:{G};font-weight:600">← Relancer une analyse</a>
+      <a href="/demo" style="font-size:13px;color:{C1};font-weight:600">← Relancer une analyse</a>
     </div>"""
     return pg("Demande envoyée", body)
 
@@ -549,7 +500,7 @@ def _demo_geo_score(brand, vert, mkt):
 
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
-        return f'<div class="ae inf">Mode démo — <a href="/register" style="color:{G};font-weight:600">Créez un compte</a> pour les résultats live.</div>'
+        return f'<div class="ae inf">Mode démo — <a href="/register" style="color:{C1};font-weight:600">Créez un compte</a> pour les résultats live.</div>'
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
@@ -671,7 +622,7 @@ def _demo_geo_score(brand, vert, mkt):
         f'<div style="font-size:12px;color:{T2};margin-top:4px">{tip}</div></div>'
         f'<div style="text-align:right;font-size:11px;color:{T3};flex-shrink:0;margin-left:16px">'
         f'Claude Haiku · {len(results)} prompts neutres<br>'
-        f'<a href="/register" style="color:{G};font-weight:600">Tracking complet 4 LLMs →</a></div></div>'
+        f'<a href="/register" style="color:{C1};font-weight:600">Tracking complet 4 LLMs →</a></div></div>'
         f'{breakdown}'
         f'<hr style="border:none;border-top:1px solid {BD};margin-bottom:14px">'
         f'{rows}</div>'
@@ -749,6 +700,22 @@ def api_history():
 
 
 # ── HEALTH ───────────────────────────────────────────────────
+
+@server.route("/report/<slug>")
+def download_report(slug):
+    """Génère et télécharge le rapport PDF — accessible sans login."""
+    from report_generator import generate_report, CLIENTS
+    if slug not in CLIENTS:
+        return jsonify({"error": f"Client inconnu : {slug}"}), 404
+    try:
+        pdf_path = generate_report(slug)
+        if not pdf_path or not os.path.exists(pdf_path):
+            return jsonify({"error": "Erreur génération PDF"}), 500
+        return send_file(pdf_path, as_attachment=True,
+                        download_name=os.path.basename(pdf_path))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @server.route("/health")
 def health():
@@ -833,7 +800,7 @@ def settings():
              display:flex;justify-content:space-between;align-items:center">
           <span id="apikey">{api_key}</span>
           <button onclick="navigator.clipboard.writeText('{api_key}');this.textContent='✓ Copié!';setTimeout(()=>this.textContent='Copier',2000)"
-                  style="border:none;background:{G};color:white;padding:5px 12px;
+                  style="border:none;background:{C1};color:white;padding:5px 12px;
                          border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;
                          flex-shrink:0;margin-left:12px">Copier</button>
         </div>
