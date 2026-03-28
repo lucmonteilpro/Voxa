@@ -265,8 +265,28 @@ def landing_layout():
                 }),
                 html.Div(
                     f"GEO Intelligence · {len(CLIENTS)} client{'s' if len(CLIENTS) > 1 else ''} actif{'s' if len(CLIENTS) > 1 else ''}",
-                    style={"fontSize": 14, "color": C["text3"], "marginBottom": 32},
+                    style={"fontSize": 14, "color": C["text3"], "marginBottom": 16},
                 ),
+
+                # Moat messaging
+                html.Div([
+                    html.Div([
+                        html.Span(item, style={
+                            "fontSize": 11, "color": C["text2"],
+                            "display": "flex", "alignItems": "center", "gap": 6,
+                        })
+                        for item in [
+                            "✓ Prompt library verticale sport · bet · politics",
+                            "✓ Vos données vous appartiennent — indépendantes de votre agence",
+                            "✓ Historique propriétaire — actif non duplicable",
+                        ]
+                    ], style={
+                        "display": "flex", "flexDirection": "column", "gap": 6,
+                        "background": C["goldL"], "borderRadius": 10,
+                        "padding": "12px 16px", "marginBottom": 28,
+                        "borderLeft": f"3px solid {C['gold']}",
+                    }),
+                ]),
 
                 # Client cards
                 *[client_card(k) for k in CLIENTS],

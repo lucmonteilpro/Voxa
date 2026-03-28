@@ -1091,7 +1091,26 @@ app.index_string = app.index_string.replace(
     }
     .nav-tabs { border-bottom: 1px solid #e5e7eb !important; }
     .Select-control { font-family: 'Syne', sans-serif !important; }
+    .voxa-footer {
+        background: #F5EDD5; border-top: 1px solid #E5D9B6;
+        padding: 12px 32px; font-size: 11px; color: #7C5B1A;
+        display: flex; justify-content: space-between; align-items: center;
+        font-family: 'Syne', sans-serif;
+    }
     </style></head>"""
+)
+
+# Footer moat — ajouté dans le layout
+app.layout.children.append(
+    html.Div([
+        html.Span("✓ Prompt library verticale sport · données propriétaires · historique indépendant de votre agence"),
+        html.Span([
+            "Voxa GEO Intelligence · ",
+            html.A("luc@sharper-media.com",
+                   href="mailto:luc@sharper-media.com",
+                   style={"color": "#B8962E", "textDecoration": "none"}),
+        ]),
+    ], className="voxa-footer")
 )
 
 # ─────────────────────────────────────────────

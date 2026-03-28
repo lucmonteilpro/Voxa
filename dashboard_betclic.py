@@ -1301,7 +1301,26 @@ body { font-family: 'Syne', sans-serif !important; }
 .nav-tabs .nav-link.active { color: #e63946 !important;
     border-bottom: 2px solid #e63946 !important; background: transparent !important; }
 .nav-tabs { border-bottom: 1px solid #e5e7eb !important; }
+.voxa-footer {
+    background: #F5EDD5; border-top: 1px solid #E5D9B6;
+    padding: 12px 32px; font-size: 11px; color: #7C5B1A;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: 'Syne', sans-serif;
+}
 </style></head>""")
+
+# Footer moat
+app.layout.children.append(
+    html.Div([
+        html.Span("✓ Prompt library verticale bet · données propriétaires · historique indépendant de votre agence"),
+        html.Span([
+            "Voxa GEO Intelligence · ",
+            html.A("luc@sharper-media.com",
+                   href="mailto:luc@sharper-media.com",
+                   style={"color": "#B8962E", "textDecoration": "none"}),
+        ]),
+    ], className="voxa-footer")
+)
 
 # ─────────────────────────────────────────────
 # ENTRY POINT

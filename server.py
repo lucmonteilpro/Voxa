@@ -235,17 +235,132 @@ def logout():
     return redirect("/login")
 
 
+@server.route("/contact-form", methods=["GET", "POST"])
+def contact_form():
+    """Formulaire de demande d'audit — accessible depuis le CTA bas de page."""
+    if request.method == "POST":
+        return redirect(url_for("contact"), code=307)  # POST → /contact
+
+    body = f"""
+    <div style="max-width:440px;margin:60px auto">
+      <div style="text-align:center;margin-bottom:24px">
+        <div class="lb" style="width:40px;height:40px;font-size:18px;margin:0 auto 10px">V</div>
+        <div class="h1">Demander un audit gratuit</div>
+        <div style="font-size:13px;color:{T3};margin-top:6px">
+          Rapport PDF · 4 LLMs · Recommandations actionnables · Sous 24h
+        </div>
+      </div>
+      <div class="card" style="padding:24px">
+        <form method="POST" action="/contact">
+          <label style="font-size:12px;font-weight:600;color:{T2};display:block;margin-bottom:5px">Votre marque</label>
+          <input name="brand" class="fi" placeholder="PSG, Betclic, votre marque..." required autofocus>
+          <label style="font-size:12px;font-weight:600;color:{T2};display:block;margin-bottom:5px">Votre nom</label>
+          <input name="name" class="fi" placeholder="Prénom Nom">
+          <label style="font-size:12px;font-weight:600;color:{T2};display:block;margin-bottom:5px">Email professionnel</label>
+          <input name="email" type="email" class="fi" placeholder="vous@example.com" required>
+          <input type="hidden" name="vertical" value="sport">
+          <input type="hidden" name="score" value="">
+          <button type="submit" class="btn bg2" style="margin-top:4px">
+            Recevoir mon audit gratuit →
+          </button>
+        </form>
+        <div style="text-align:center;font-size:11px;color:{T3};margin-top:12px">
+          Sans engagement · Vos données vous appartiennent
+        </div>
+      </div>
+    </div>"""
+    return pg("Audit gratuit", body)
+
+
 # ── DEMO PUBLIQUE ────────────────────────────────────────────
+
+@server.route("/contact", methods=["POST"])
+def contact():
+    """Lead capture depuis la démo — envoie un email à Luc."""
+    email  = request.form.get("email", "").strip()
+    brand  = request.form.get("brand", "").strip()
+    score  = request.form.get("score", "")
+    vert   = request.form.get("vertical", "")
+    name   = request.form.get("name", "").strip()
+
+    if not email:
+        return jsonify({"error": "Email requis"}), 400
+
+    # Stocker le lead dans voxa_accounts.db
+    try:
+        c = vdb.conn_accounts()
+        c.execute("""CREATE TABLE IF NOT EXISTS leads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT, name TEXT, brand TEXT,
+            score TEXT, vertical TEXT,
+            created_at TEXT DEFAULT (datetime('now')))""")
+        c.execute("INSERT INTO leads (email,name,brand,score,vertical) VALUES (?,?,?,?,?)",
+                  (email, name, brand, score, vert))
+        c.commit()
+        c.close()
+    except Exception:
+        pass
+
+    # Email de notification
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pwd  = os.getenv("SMTP_PASSWORD", "")
+    if smtp_user and smtp_pwd:
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+            msg = MIMEText(
+                f"Nouveau lead Voxa\n\n"
+                f"Nom    : {name or '—'}\n"
+                f"Email  : {email}\n"
+                f"Marque : {brand} ({vert})\n"
+                f"Score  : {score}/100\n"
+                f"Date   : {datetime.utcnow().strftime('%d/%m/%Y %H:%M')} UTC\n",
+                "plain", "utf-8"
+            )
+            msg["Subject"] = f"🎯 Lead Voxa — {brand} ({score}/100)"
+            msg["From"]    = smtp_user
+            msg["To"]      = "luc@sharper-media.com"
+            with smtplib.SMTP(os.getenv("SMTP_HOST","smtp.gmail.com"),
+                              int(os.getenv("SMTP_PORT","587"))) as s:
+                s.starttls()
+                s.login(smtp_user, smtp_pwd)
+                s.sendmail(smtp_user, ["luc@sharper-media.com"], msg.as_string())
+        except Exception:
+            pass
+
+    # Confirmation HTML
+    body = f"""
+    <div style="text-align:center;padding:60px 20px;max-width:480px;margin:0 auto">
+      <div style="font-size:48px;margin-bottom:16px">✅</div>
+      <div style="font-size:24px;font-weight:800;color:{N};margin-bottom:8px">Demande reçue !</div>
+      <div style="font-size:14px;color:{T2};margin-bottom:24px;line-height:1.6">
+        Votre audit gratuit de <strong>{brand}</strong> est en cours de préparation.
+        Luc vous contacte sous 24h à <strong>{email}</strong>.
+      </div>
+      <div class="card" style="text-align:left;padding:16px 20px;margin-bottom:24px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:{T3};margin-bottom:10px">
+          CE QUE VOUS RECEVREZ
+        </div>
+        {"".join(f'<div style="font-size:13px;color:{T2};margin-bottom:6px">✓ {item}</div>' for item in [
+            f"GEO Score {brand} sur 4 LLMs — données réelles",
+            "Benchmark vs vos concurrents directs",
+            "3 recommandations actionnables prioritaires",
+            "Rapport PDF complet (25 pages)",
+        ])}
+      </div>
+      <a href="/demo" style="font-size:13px;color:{G};font-weight:600">← Relancer une analyse</a>
+    </div>"""
+    return pg("Demande envoyée", body)
+
 
 @server.route("/demo", methods=["GET", "POST"])
 def demo():
     brand = request.form.get("brand", "").strip() if request.method == "POST" else ""
     vert  = request.form.get("vertical", "sport")
     mkt   = request.form.get("market", "fr")
-    vote_html = score_html = ""
+    vote_html = score_html = lead_html = ""
 
     if brand:
-        # Competitive intelligence vote
         from voxa_engine import competitive_vote
         vote = competitive_vote(brand, vert, mkt)
         if vote.get("competitors"):
@@ -255,17 +370,54 @@ def demo():
                 for cx in vote["competitors"])
             vote_html = f"""<div class="card" style="margin-bottom:16px">
               <div class="lbl" style="margin-bottom:10px">CONCURRENTS DÉTECTÉS DANS L'IA · {brand.upper()}</div>
-              <div style="display:flex;flex-wrap:wrap;gap:4px">{chips}</div>
-              <div style="font-size:11px;color:{T3};margin-top:10px">
+              <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">{chips}</div>
+              <div style="font-size:11px;color:{T3}">
                 Marques les plus souvent citées avec <strong>{brand}</strong> par les LLMs.
+                Voxa les tracke toutes automatiquement, chaque nuit.
               </div></div>"""
 
-        # Score préliminaire
         score_html = _demo_geo_score(brand, vert, mkt)
+
+        # Lead capture affiché après les résultats
+        score_val = ""
+        try:
+            import re as _re
+            m = _re.search(r'font-size:32px[^>]+>(\d+)', score_html)
+            if m: score_val = m.group(1)
+        except Exception:
+            pass
+
+        lead_html = f"""<div class="card" style="background:{N};padding:24px">
+          <div style="font-weight:800;font-size:18px;color:{W};margin-bottom:4px">
+            Recevoir l'audit complet de {brand} ?
+          </div>
+          <div style="color:rgba(255,255,255,.6);font-size:13px;margin-bottom:16px">
+            Rapport PDF · 4 LLMs · {len(vote.get('competitors',[]))} concurrents trackés · Recommandations actionnables
+          </div>
+          <form method="POST" action="/contact" style="display:flex;flex-direction:column;gap:10px">
+            <input type="hidden" name="brand"    value="{brand}">
+            <input type="hidden" name="vertical" value="{vert}">
+            <input type="hidden" name="score"    value="{score_val}">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <input name="name"  class="fi" placeholder="Prénom Nom"
+                     style="margin-bottom:0;background:rgba(255,255,255,.1);
+                            border-color:rgba(255,255,255,.2);color:{W}">
+              <input name="email" type="email" class="fi" placeholder="vous@example.com" required
+                     style="margin-bottom:0;background:rgba(255,255,255,.1);
+                            border-color:rgba(255,255,255,.2);color:{W}">
+            </div>
+            <button type="submit" class="btn bg2"
+                    style="width:100%;justify-content:center;font-size:14px;padding:12px">
+              Recevoir mon audit gratuit →
+            </button>
+          </form>
+          <div style="font-size:11px;color:rgba(255,255,255,.35);margin-top:10px;text-align:center">
+            Réponse sous 24h · Sans engagement · Vos données vous appartiennent
+          </div>
+        </div>"""
 
     verts = [("sport","⚽ Sport"),("bet","🎰 Betting"),("politics","🗳 Politics")]
     mkts  = [("fr","🇫🇷 France"),("en","🇬🇧 Anglais"),("pt","🇵🇹 Portugal")]
-
     vr = "".join(
         f'<label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">'
         f'<input type="radio" name="vertical" value="{v}" {"checked" if v==vert else ""}> {n}</label>'
@@ -277,9 +429,19 @@ def demo():
     body = f"""
     <div style="text-align:center;margin-bottom:28px">
       <div class="lbl" style="margin-bottom:8px">DEMO LIVE · GRATUIT</div>
-      <div class="h1" style="font-size:26px;margin-bottom:6px">Votre marque dans ChatGPT et Perplexity</div>
-      <div style="font-size:13px;color:{T2}">Concurrents détectés + GEO Score — en 30 secondes.</div>
+      <div class="h1" style="font-size:26px;margin-bottom:6px">
+        Votre marque dans ChatGPT et Perplexity
+      </div>
+      <div style="font-size:13px;color:{T2};margin-bottom:12px">
+        Concurrents détectés + GEO Score — en 30 secondes.
+      </div>
+      <div style="display:inline-flex;gap:20px;font-size:12px;color:{T3}">
+        <span>✓ Prompt library verticale sport/bet</span>
+        <span>✓ Données propriétaires du client</span>
+        <span>✓ Historique indépendant de votre agence</span>
+      </div>
     </div>
+
     <div class="card" style="margin-bottom:18px">
       <form method="POST">
         <div class="g2" style="margin-bottom:12px">
@@ -300,16 +462,25 @@ def demo():
         <button type="submit" class="btn bg2">Analyser →</button>
       </form>
     </div>
-    {vote_html}{score_html}
-    <div class="card" style="text-align:center;background:{N}">
-      <div style="font-weight:800;font-size:17px;color:{W};margin-bottom:6px">Tracker votre marque chaque semaine ?</div>
-      <div style="color:rgba(255,255,255,.6);font-size:13px;margin-bottom:16px">Dashboard live · 4 LLMs · Alertes auto</div>
-      <a href="/register" class="btn bg2" style="width:auto;padding:10px 22px">Démarrer gratuitement →</a>
+
+    {vote_html}{score_html}{lead_html}
+
+    <div class="card" style="text-align:center;background:{N};padding:24px">
+      <div style="font-weight:800;font-size:17px;color:{W};margin-bottom:4px">
+        Tracker votre marque chaque semaine ?
+      </div>
+      <div style="color:rgba(255,255,255,.6);font-size:12px;margin-bottom:16px">
+        Prompt library verticale · Données propriétaires · Historique indépendant de votre agence
+      </div>
+      <a href="/contact-form" class="btn bg2" style="width:auto;padding:10px 22px">
+        Demander un audit gratuit →
+      </a>
+      <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:10px">
+        Réponse sous 24h · Sans engagement
+      </div>
     </div>"""
 
     return pg_wide("Demo live", body)
-
-
 def _demo_geo_score(brand, vert, mkt):
     """
     Prompts neutres — la marque n'est PAS dans la question.
