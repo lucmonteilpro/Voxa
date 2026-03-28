@@ -255,34 +255,104 @@ code{{font-family:var(--mono);background:rgba(0,229,255,.06);padding:2px 6px;bor
 
 DASH_CSS = f"""<link href="{FONTS_URL}" rel="stylesheet">
 <style>
-:root{{--c1:{C1};--c2:{C2};--ng:{NG};--bg:{BG};--bg3:{BG3};--bd:{BD};--w:{W};--t2:{T2};--t3:{T3};}}
-html,body{{background:{BG}!important;color:{W}!important;font-family:{FONT_BODY}!important;}}
-.card-title-voxa{{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:{T3};margin-bottom:16px;}}
-.nav-tabs .nav-link{{color:{T3}!important;border:none!important;border-bottom:2px solid transparent!important;font-family:{FONT_BODY};}}
-.nav-tabs .nav-link.active{{color:{C1}!important;border-bottom:2px solid {C1}!important;background:transparent!important;}}
-.nav-tabs{{border-bottom:1px solid {BD}!important;}}
-.Select-control{{font-family:{FONT_BODY}!important;background:{BG3}!important;color:{W}!important;border-color:{BD}!important;}}
-.Select-menu-outer{{background:{BG3}!important;border-color:{BD}!important;}}
-.Select-option{{background:{BG3}!important;color:{W}!important;}}
-.Select-option:hover,.Select-option.is-focused{{background:{BD}!important;}}
-.Select-value-label{{color:{W}!important;}}
-table{{color:{W}!important;}}
-th{{color:{T3}!important;border-bottom:1px solid {BD}!important;background:{BG}!important;}}
-td{{border-color:{BD}!important;}}
-tr:hover td{{background:rgba(0,229,255,0.03)!important;}}
-.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner td{{
-  background:{BG3}!important;color:{W}!important;border-color:{BD}!important;
+/* ── BOOTSTRAP 5 VARIABLE OVERRIDE (dark mode complet) ────── */
+:root {{
+  --vx-c1:{C1}; --vx-c2:{C2}; --vx-ng:{NG};
+  --vx-bg:{BG}; --vx-bg2:{BG2}; --vx-bg3:{BG3};
+  --vx-bd:{BD}; --vx-bd2:{BD2};
+  --vx-w:{W}; --vx-t2:{T2}; --vx-t3:{T3}; --vx-red:{RED};
+  --bs-body-bg:{BG}; --bs-body-color:{W};
+  --bs-card-bg:{BG3}; --bs-card-border-color:{BD}; --bs-card-color:{W};
+  --bs-border-color:{BD};
+  --bs-table-bg:{BG3}; --bs-table-color:{W}; --bs-table-border-color:{BD};
+  --bs-table-hover-bg:rgba(0,229,255,0.04); --bs-table-striped-bg:{BG2};
+  --bs-input-bg:{BG3}; --bs-input-color:{W}; --bs-input-border-color:{BD2};
+  --bs-link-color:{C1}; --bs-link-hover-color:{NG};
+  --bs-nav-link-color:{T3}; --bs-nav-tabs-border-color:{BD};
+  --bs-dropdown-bg:{BG3}; --bs-dropdown-border-color:{BD}; --bs-dropdown-color:{W};
+  --bs-secondary-bg:{BG3}; --bs-tertiary-bg:{BG2};
+  --bs-emphasis-color:{W}; --bs-secondary-color:{T2}; --bs-tertiary-color:{T3};
+  --bs-modal-bg:{BG3}; --bs-modal-border-color:{BD};
+  --bs-accordion-bg:{BG3}; --bs-accordion-border-color:{BD}; --bs-accordion-color:{W};
+  --bs-list-group-bg:{BG3}; --bs-list-group-border-color:{BD}; --bs-list-group-color:{W};
 }}
-.voxa-footer{{
-  background:rgba(0,229,255,0.03);border-top:1px solid {BD};
-  padding:12px 32px;font-size:11px;color:{T3};
-  display:flex;justify-content:space-between;align-items:center;
-  font-family:{FONT_BODY};
+
+/* ── BASE ── */
+html, body {{
+  background:{BG}!important; color:{W}!important;
+  font-family:{FONT_BODY}!important; -webkit-font-smoothing:antialiased;
 }}
-.voxa-footer a{{color:{C1};text-decoration:none;}}
-::-webkit-scrollbar{{width:6px;}}
-::-webkit-scrollbar-track{{background:{BG};}}
-::-webkit-scrollbar-thumb{{background:{BD2};border-radius:3px;}}
+#react-entry-point, ._dash-loading {{ background:{BG}!important; }}
+
+/* ── CARDS ── */
+.card {{ background:{BG3}!important; border:1px solid {BD}!important;
+  border-radius:12px!important; box-shadow:0 4px 24px rgba(0,229,255,0.06)!important; }}
+.card-body,.card-header,.card-footer {{ background:transparent!important; color:{W}!important; border-color:{BD}!important; }}
+
+/* ── CONTAINERS ── */
+.container,.container-fluid,.row {{ background:transparent!important; }}
+
+/* ── TABS ── */
+.nav-tabs {{ border-bottom:1px solid {BD}!important; background:transparent!important; }}
+.nav-tabs .nav-link {{
+  color:{T3}!important; border:none!important;
+  border-bottom:2px solid transparent!important; background:transparent!important;
+  font-family:{FONT_BODY}!important; font-weight:600; transition:color 0.2s,border-color 0.2s;
+}}
+.nav-tabs .nav-link:hover {{ color:{T2}!important; }}
+.nav-tabs .nav-link.active {{
+  color:{C1}!important; border-bottom:2px solid {C1}!important; background:transparent!important;
+}}
+
+/* ── FORMS ── */
+.form-control,.form-select {{
+  background:{BG3}!important; border-color:{BD2}!important; color:{W}!important;
+}}
+.form-control:focus,.form-select:focus {{
+  background:{BG3}!important; border-color:{C1}!important;
+  box-shadow:0 0 0 3px rgba(0,229,255,0.15)!important; color:{W}!important;
+}}
+.form-control::placeholder {{ color:{T3}!important; opacity:1; }}
+.form-check-label {{ color:{T2}!important; }}
+.form-check-input:checked {{ background-color:{C1}!important; border-color:{C1}!important; }}
+
+/* ── SELECT (react-select v1 Dash) ── */
+.Select-control {{ background:{BG3}!important; border-color:{BD}!important; color:{W}!important; font-family:{FONT_BODY}!important; border-radius:8px!important; }}
+.Select-placeholder,.Select-value-label {{ color:{T2}!important; }}
+.Select-input>input {{ color:{W}!important; background:transparent!important; }}
+.Select-arrow {{ border-top-color:{T3}!important; }}
+.Select-menu-outer {{ background:{BG3}!important; border-color:{BD}!important; box-shadow:0 8px 32px rgba(0,0,0,0.6)!important; z-index:9999; }}
+.Select-option {{ background:{BG3}!important; color:{W}!important; }}
+.Select-option:hover,.Select-option.is-focused {{ background:{BD}!important; color:{C1}!important; }}
+.Select-option.is-selected {{ background:rgba(0,229,255,0.15)!important; color:{C1}!important; }}
+.is-open>.Select-control {{ border-color:{C1}!important; }}
+
+/* ── TABLES ── */
+.table {{ color:{W}!important; border-color:{BD}!important; }}
+.table th {{ color:{T3}!important; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; background:{BG}!important; border-bottom:1px solid {BD}!important; padding:10px 14px; }}
+.table td {{ border-color:{BD}!important; padding:10px 14px; vertical-align:middle; }}
+.table tbody tr:hover {{ background:rgba(0,229,255,0.03)!important; }}
+.table>:not(caption)>*>* {{ background-color:transparent!important; }}
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner td {{ background:{BG3}!important; color:{W}!important; border-color:{BD}!important; }}
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner th {{ background:{BG}!important; color:{T3}!important; border-color:{BD}!important; }}
+
+/* ── PLOTLY ── */
+.js-plotly-plot .plotly .bg,.plotly-graph-div {{ background:transparent!important; }}
+.modebar {{ background:transparent!important; }}
+.modebar-btn path {{ fill:{T3}!important; }}
+
+/* ── BADGE/CARD TITLE ── */
+.card-title-voxa {{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:2px; color:{T3}; margin-bottom:14px; font-family:{FONT_BODY}; }}
+
+/* ── FOOTER ── */
+.voxa-footer {{ background:rgba(0,229,255,0.03); border-top:1px solid {BD}; padding:12px 32px; font-size:11px; color:{T3}; display:flex; justify-content:space-between; align-items:center; font-family:{FONT_BODY}; }}
+.voxa-footer a {{ color:{C1}; text-decoration:none; }}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar {{ width:6px; height:6px; }}
+::-webkit-scrollbar-track {{ background:{BG}; }}
+::-webkit-scrollbar-thumb {{ background:{BD2}; border-radius:3px; }}
+::-webkit-scrollbar-thumb:hover {{ background:{T3}; }}
 </style>"""
 
 
