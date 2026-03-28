@@ -124,13 +124,13 @@ def get_client_stats(client_key: str) -> dict:
 # APP DASH
 # ─────────────────────────────────────────────
 
+from server import server  # serveur Flask partagé — auth, /demo, /health, API
 app = dash.Dash(
-    __name__,
+    server=server,
     external_stylesheets=[dbc.themes.BOOTSTRAP, FONT],
     suppress_callback_exceptions=True,
     title="Voxa · GEO Intelligence",
 )
-server = app.server
 
 # ─────────────────────────────────────────────
 # LAYOUT
@@ -335,53 +335,8 @@ def display_page(pathname):
 # FLASK ROUTES ADDITIONNELLES
 # ─────────────────────────────────────────────
 
-from flask import jsonify, redirect
-
-@server.route("/health")
-def health():
-    status = {}
-    for key, cfg in CLIENTS.items():
-        db_ok = os.path.exists(cfg["db"])
-        stats = get_client_stats(key) if db_ok else {}
-        status[key] = {
-            "db_exists": db_ok,
-            "last_run": stats.get("last_run"),
-            "n_runs": stats.get("n_runs", 0),
-            "geo_score": stats.get("score"),
-        }
-    return jsonify({
-        "status": "ok",
-        "timestamp": datetime.utcnow().isoformat(),
-        "clients": status,
-        "voxa_version": "1.0.0",
-    })
-
-
-@server.route("/report/<client_key>")
-def download_report(client_key):
-    """Génère et télécharge le rapport PDF d'un client."""
-    if client_key not in CLIENTS:
-        return jsonify({"error": "Client inconnu"}), 404
-
-    # Appel au report_generator
-    import subprocess
-    result = subprocess.run(
-        ["python3", "report_generator.py", "--client", client_key],
-        capture_output=True, text=True, cwd=BASE_DIR,
-    )
-
-    if result.returncode != 0:
-        return jsonify({"error": "Erreur génération rapport", "detail": result.stderr}), 500
-
-    from flask import send_file
-    today = datetime.now().strftime("%Y-%m")
-    name = CLIENTS[client_key]["name"]
-    pdf_path = os.path.join(BASE_DIR, f"Voxa_Report_{name}_{today}.pdf")
-
-    if not os.path.exists(pdf_path):
-        return jsonify({"error": "Fichier PDF non trouvé"}), 500
-
-    return send_file(pdf_path, as_attachment=True, download_name=os.path.basename(pdf_path))
+# Routes Flask gérées par server.py (health, report, demo, login, API)
+# app_router.py ne définit plus de routes Flask directement.
 
 
 # ─────────────────────────────────────────────
