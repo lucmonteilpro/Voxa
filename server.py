@@ -309,18 +309,71 @@ def demo():
 
 
 def _demo_geo_score(brand, vert, mkt):
+    """
+    Prompts neutres — la marque n'est PAS dans la question.
+    Scoring multi-dimensionnel :
+      Présence  40 pts : citée spontanément
+      Position  30 pts : citée dans le premier tiers
+      Sentiment 20 pts : ton positif autour de la mention
+      Fréquence 10 pts : citée 2+ fois
+    """
+    import re as _re
+
     pm = {
-        "sport":    [f"Quel est le meilleur club de football en 2025 ? Parle de {brand}.",
-                     f"Comment est perçu {brand} par les fans en Europe ?",
-                     f"Pourquoi suivre {brand} ?"],
-        "bet":      [f"Est-ce que {brand} est fiable pour les paris sportifs ?",
-                     f"Quelles sont les meilleures cotes sur {brand} ?",
-                     f"Comment {brand} se compare à ses concurrents ?"],
-        "politics": [f"Quelle est la position de {brand} sur l'économie ?",
-                     f"Comment est perçu {brand} dans les médias ?",
-                     f"Quelles sont les propositions de {brand} ?"],
+        "sport": [
+            "Quels sont les meilleurs clubs de football en France en 2025 ? Donne un top 5.",
+            "Quel club de Ligue 1 recommandes-tu pour un fan de foot français ?",
+            "Quels clubs européens ont la meilleure réputation internationale en ce moment ?",
+        ],
+        "bet": [
+            "Quels sont les meilleurs sites de paris sportifs en France en 2025 ? Top 5.",
+            "Quel opérateur de paris sportifs est le plus fiable pour les cotes et les paiements ?",
+            "Quel site de paris recommandes-tu pour parier sur la Ligue 1 et la Champions League ?",
+        ],
+        "politics": [
+            "Quelles personnalités politiques françaises sont les plus influentes et citées en 2025 ?",
+            "Quels partis et candidats français sont les plus présents dans l'actualité politique récente ?",
+            "Qui sont les figures politiques françaises incontournables en ce moment ?",
+        ],
     }
-    prompts = pm.get(vert, pm["sport"])
+    lang_overrides = {
+        "en": {
+            "sport": [
+                "What are the best football clubs in Europe right now? List the top 5.",
+                "Which Ligue 1 club would you recommend to a football fan?",
+                "Which European clubs have the best international reputation currently?",
+            ],
+            "bet": [
+                "What are the best sports betting sites in Europe in 2025? Top 5.",
+                "Which sports betting operator is most reliable for odds and payouts?",
+                "Which betting site would you recommend for Champions League betting?",
+            ],
+            "politics": [
+                "Who are the most influential and frequently cited French politicians in 2025?",
+                "Which French parties and candidates are most prominent in current affairs?",
+                "Who are the unavoidable French political figures right now?",
+            ],
+        },
+        "pt": {
+            "bet": [
+                "Quais são os melhores sites de apostas desportivas em Portugal em 2025? Top 5.",
+                "Qual operador de apostas é mais confiável para odds e pagamentos?",
+                "Qual site de apostas recomendas para apostar na Liga Portugal?",
+            ],
+            "sport": [
+                "Quais são os melhores clubes de futebol em Portugal em 2025? Top 5.",
+                "Qual clube recomendas a um adepto de futebol português?",
+                "Quais clubes têm melhor reputação europeia atualmente?",
+            ],
+        },
+    }
+
+    lang = mkt.split("-")[0] if "-" in mkt else mkt
+    if lang in lang_overrides and vert in lang_overrides[lang]:
+        prompts = lang_overrides[lang][vert]
+    else:
+        prompts = pm.get(vert, pm["sport"])
+
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
         return f'<div class="ae inf">Mode démo — <a href="/register" style="color:{G};font-weight:600">Créez un compte</a> pour les résultats live.</div>'
@@ -330,60 +383,126 @@ def _demo_geo_score(brand, vert, mkt):
     except Exception:
         return ""
 
+    pos_w = {
+        "sport":    ["meilleur","recommandé","excellent","top","incontournable","référence",
+                     "populaire","champion","solide","qualité","performant"],
+        "bet":      ["fiable","sécurisé","agréé","recommandé","meilleur","leader","reconnu",
+                     "sérieux","réputé","certifié","légal","officiel"],
+        "politics": ["influent","reconnu","populaire","représentatif","crédible",
+                     "incontournable","figure","leader","important","engagé"],
+    }.get(vert, ["meilleur","recommandé","top","fiable","reconnu"])
+
+    neg_w = {
+        "sport":    ["relégué","mauvais","décevant","faible","problème"],
+        "bet":      ["illégal","frauduleux","risqué","éviter","interdit","arnaque","non agréé"],
+        "politics": ["controversé","scandale","condamné","extrémiste","marginal"],
+    }.get(vert, ["mauvais","éviter","problème","faible"])
+
     results = []; total = 0
+    brand_lower = brand.lower()
+
     for pt in prompts:
         try:
-            r = client.messages.create(model=MODEL_H, max_tokens=250,
-                messages=[{"role":"user","content":pt}])
+            r = client.messages.create(
+                model=MODEL_H, max_tokens=350,
+                system="Tu réponds de façon factuelle et concise. Tu fournis des listes claires quand demandé.",
+                messages=[{"role":"user","content":pt}]
+            )
             ans = r.content[0].text
-            # Nettoyer le markdown pour l'affichage HTML
-            import re as _re
-            ans_clean = _re.sub(r'\*\*(.+?)\*\*', r'\1', ans)  # **bold**
-            ans_clean = _re.sub(r'\*(.+?)\*', r'\1', ans_clean)  # *italic*
-            ans_clean = _re.sub(r'^#{1,3}\s+', '', ans_clean, flags=_re.MULTILINE)  # # headers
-            ans_clean = ans_clean.strip()
-            mentioned = brand.lower() in ans.lower()
-            pos_w = ["excellent","meilleur","top","recommande","fiable","fort","leader"]
-            neg_w = ["problème","difficile","faible","mauvais","éviter"]
-            sent = "positive" if any(w in ans.lower() for w in pos_w) else \
-                   ("negative" if any(w in ans.lower() for w in neg_w) else "neutral")
-            score = (40 if mentioned else 0) + (30 if mentioned else 0) + \
-                    (20 if sent == "positive" else 0) + 10
-            total += score
-            results.append({"prompt":pt,"answer":ans_clean[:260]+"..." if len(ans_clean)>260 else ans_clean,
-                            "mentioned":mentioned,"sentiment":sent,"score":score})
-        except Exception as e:
-            results.append({"prompt":pt,"answer":str(e),"mentioned":False,"sentiment":"neutral","score":0})
 
-    avg = round(total / max(len(results), 1)); clr = sc(avg)
+            # Nettoyage markdown
+            ans_c = _re.sub(r'\*\*(.+?)\*\*', r'\1', ans)
+            ans_c = _re.sub(r'\*(.+?)\*',     r'\1', ans_c)
+            ans_c = _re.sub(r'^#{1,3}\s+',    '',    ans_c, flags=_re.MULTILINE)
+            ans_c = ans_c.strip()
+            ans_l = ans_c.lower()
+
+            # Présence (40 pts)
+            occ      = ans_l.count(brand_lower)
+            presence = occ > 0
+
+            # Position (30 pts) — premier tiers
+            first_idx = ans_l.find(brand_lower)
+            early     = presence and first_idx <= len(ans_l) // 3
+
+            # Sentiment (20 pts) — fenêtre 100 chars autour de la mention
+            ctx = ans_l[max(0,first_idx-100):first_idx+100+len(brand_lower)] if presence else ans_l
+            sent_p = any(w in ctx for w in pos_w)
+            sent_n = any(w in ctx for w in neg_w)
+            sentiment = "positive" if sent_p and not sent_n else ("negative" if sent_n else "neutral")
+
+            # Fréquence (10 pts)
+            frequent = occ >= 2
+
+            score = max(0, min(100,
+                (40 if presence  else 0) +
+                (30 if early     else 0) +
+                (20 if sentiment == "positive" else (-10 if sentiment == "negative" else 0)) +
+                (10 if frequent  else 0)
+            ))
+            total += score
+            results.append({"prompt":pt,"answer":ans_c[:300]+"..." if len(ans_c)>300 else ans_c,
+                            "mentioned":presence,"early":early,"sentiment":sentiment,
+                            "occurrences":occ,"score":score})
+        except Exception as ex:
+            results.append({"prompt":pt,"answer":str(ex),"mentioned":False,
+                           "early":False,"sentiment":"neutral","occurrences":0,"score":0})
+
+    avg = round(total / max(len(results), 1))
+    clr = sc(avg)
+    lbl = "Excellent" if avg >= 70 else ("Moyen" if avg >= 40 else "Faible")
+    tip = {"Excellent": "Votre marque est bien ancrée dans les réponses IA.",
+           "Moyen":     "Des actions GEO peuvent améliorer ce score significativement.",
+           "Faible":    "Votre marque est quasi absente des LLMs — opportunité GEO majeure."}[lbl]
+
     rows = ""
     for r in results:
-        mb = f'<span style="color:{GRN};font-size:11px;font-weight:700">✓ MENTIONNÉ</span>' if r["mentioned"] else \
-             f'<span style="color:{RED};font-size:11px;font-weight:700">✗ ABSENT</span>'
-        rows += f"""<div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid {BD}">
-          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-            <div style="font-size:12px;color:{T3};font-style:italic">"{r['prompt']}"</div>
-            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;margin-left:10px">
-              {mb}<span style="font-weight:800;color:{sc(r['score'])}">{r['score']}/100</span>
-            </div>
-          </div>
-          <div style="font-size:13px;color:#374151;line-height:1.5;background:{BG};
-               padding:10px;border-radius:8px">{r['answer']}</div>
-        </div>"""
+        if r["mentioned"]:
+            badge = f'<span style="color:{GRN};font-size:11px;font-weight:700">✓ {"TÔT" if r["early"] else "CITÉE"}</span>'
+        else:
+            badge = f'<span style="color:{RED};font-size:11px;font-weight:700">✗ ABSENTE</span>'
+        sent_col = GRN if r["sentiment"]=="positive" else (RED if r["sentiment"]=="negative" else T3)
+        sent_ico = "😊" if r["sentiment"]=="positive" else ("😟" if r["sentiment"]=="negative" else "😐")
+        opp = "" if r["mentioned"] else f'<div style="font-size:11px;color:{RED};margin-top:6px">⚠ Marque absente — opportunité GEO directe.</div>'
 
-    return f"""<div class="card" style="margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <div>
-          <div class="lbl">GEO SCORE PRÉLIMINAIRE · {brand.upper()}</div>
-          <div style="font-size:26px;font-weight:800;color:{clr};margin-top:4px">
-            {avg}<span style="font-size:14px;color:{T3}">/100</span></div>
-        </div>
-        <div style="text-align:right;font-size:11px;color:{T3}">
-          Claude Haiku · {mkt.upper()} · {len(results)} prompts<br>
-          <a href="/register" style="color:{G};font-weight:600">Tracking complet →</a>
-        </div>
-      </div>{rows}</div>"""
+        rows += (
+            f'<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid {BD}">'
+            f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
+            f'<div style="font-size:12px;color:{T3};font-style:italic;flex:1">"{r["prompt"]}"</div>'
+            f'<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;margin-left:12px">'
+            f'{badge}<span style="font-size:11px;color:{sent_col}">{sent_ico}</span>'
+            f'<span style="font-weight:800;font-size:16px;color:{sc(r["score"])}">{r["score"]}</span>'
+            f'</div></div>'
+            f'<div style="font-size:13px;color:#374151;line-height:1.6;background:{BG};padding:10px 12px;border-radius:8px">{r["answer"]}</div>'
+            f'{opp}</div>'
+        )
 
+    breakdown = (
+        f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0 14px">'
+        + "".join(
+            f'<div style="text-align:center;padding:8px 4px;background:{BG};border-radius:8px">'
+            f'<div style="font-size:11px;font-weight:700;color:{N}">{nm}</div>'
+            f'<div style="font-size:10px;color:{T3}">{pts} pts max</div></div>'
+            for nm, pts in [("Présence","40"),("Position","30"),("Sentiment","20"),("Fréquence","10")]
+        )
+        + '</div>'
+    )
+
+    return (
+        f'<div class="card" style="margin-bottom:16px">'
+        f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'
+        f'<div><div class="lbl">GEO SCORE · {brand.upper()} · {mkt.upper()}</div>'
+        f'<div style="font-size:32px;font-weight:800;color:{clr};margin-top:4px;line-height:1">'
+        f'{avg}<span style="font-size:16px;color:{T3}">/100</span>'
+        f'<span style="font-size:13px;font-weight:600;color:{clr};margin-left:8px">{lbl}</span></div>'
+        f'<div style="font-size:12px;color:{T2};margin-top:4px">{tip}</div></div>'
+        f'<div style="text-align:right;font-size:11px;color:{T3};flex-shrink:0;margin-left:16px">'
+        f'Claude Haiku · {len(results)} prompts neutres<br>'
+        f'<a href="/register" style="color:{G};font-weight:600">Tracking complet 4 LLMs →</a></div></div>'
+        f'{breakdown}'
+        f'<hr style="border:none;border-top:1px solid {BD};margin-bottom:14px">'
+        f'{rows}</div>'
+    )
 
 # ── API publique ─────────────────────────────────────────────
 
