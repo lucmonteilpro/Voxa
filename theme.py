@@ -353,6 +353,38 @@ html, body {{
 ::-webkit-scrollbar-track {{ background:{BG}; }}
 ::-webkit-scrollbar-thumb {{ background:{BD2}; border-radius:3px; }}
 ::-webkit-scrollbar-thumb:hover {{ background:{T3}; }}
+
+/* ── RADIO BUTTONS & CHECKBOXES ───────────────────────────── */
+input[type="radio"] {{
+  accent-color: {C1} !important;
+  width: 15px; height: 15px; cursor: pointer;
+  background: {BG3} !important;
+  border: 2px solid {BD2} !important;
+}}
+input[type="checkbox"] {{
+  accent-color: {C1} !important;
+  background: {BG3} !important;
+}}
+.form-check-input[type="radio"] {{
+  background-color: {BG3} !important;
+  border: 2px solid {BD2} !important;
+}}
+.form-check-input[type="radio"]:checked {{
+  background-color: {C1} !important;
+  border-color: {C1} !important;
+  box-shadow: 0 0 0 3px rgba(0,229,255,0.2) !important;
+}}
+.form-check-label {{ color: {T2} !important; font-family: {FONT_BODY} !important; }}
+
+/* ── BUTTONS dark ─────────────────────────────────────────── */
+button:not(.btn):not([class*="modebar"]) {{
+  background: {BG3} !important;
+  color: {T2} !important;
+  border: 1px solid {BD} !important;
+  border-radius: 8px !important;
+  font-family: {FONT_BODY} !important;
+}}
+button:not(.btn):hover {{ border-color: {C1} !important; color: {C1} !important; }}
 </style>"""
 
 
@@ -479,6 +511,104 @@ def badge_style(color: str = C1, bg_opacity: float = 0.12) -> dict:
         "background": bg, "color": color,
         "border": f"1px solid {border}",
     }
+
+
+
+# ─────────────────────────────────────────────────────────────
+# COMPOSANTS DASH RÉUTILISABLES
+# ─────────────────────────────────────────────────────────────
+
+def make_topbar(client_name: str, vertical: str = "sport",
+                right_children=None) -> "html.Div":
+    """
+    Topbar standardisée Voxa — à utiliser dans tous les dashboards.
+    Paramètres :
+      client_name   : ex "Betclic", "PSG"
+      vertical      : "sport" | "bet" | "politics"
+      right_children: liste de composants Dash additionnels (boutons, etc.)
+    """
+    from dash import html
+
+    vert_colors = {
+        "sport":    (C1, f"rgba(0,229,255,0.10)"),
+        "bet":      (C1, f"rgba(0,229,255,0.10)"),
+        "politics": (C2, f"rgba(123,77,255,0.10)"),
+    }
+    accent, tag_bg = vert_colors.get(vertical, vert_colors["sport"])
+
+    logo = html.A([
+        # Logo V gradient Voxa
+        html.Div("V", style={
+            "width": 32, "height": 32,
+            "background": GRD,
+            "borderRadius": 8,
+            "display": "flex", "alignItems": "center", "justifyContent": "center",
+            "fontSize": 15, "fontWeight": 900, "color": BG,
+            "boxShadow": f"0 0 12px rgba(0,229,255,0.4)",
+            "flexShrink": 0,
+        }),
+        html.Span("voxa", style={
+            "fontWeight": 800, "fontSize": 18, "letterSpacing": "-.5px",
+            "background": GRD,
+            "WebkitBackgroundClip": "text", "WebkitTextFillColor": "transparent",
+        }),
+        html.Span("GEO INTELLIGENCE", style={
+            "fontSize": 8, "fontWeight": 700, "letterSpacing": "2px",
+            "textTransform": "uppercase", "padding": "3px 8px",
+            "borderRadius": 20, "background": tag_bg,
+            "color": accent, "border": f"1px solid {accent}33",
+        }),
+    ], href="/", style={"display": "flex", "alignItems": "center", "gap": 10,
+                        "textDecoration": "none"})
+
+    right = html.Div(
+        (right_children or []) + [
+            html.Div([
+                "Client : ", html.Strong(client_name, style={"color": C1}),
+            ], style={
+                "background": BG2, "border": f"1px solid {BD}",
+                "borderRadius": 8, "padding": "5px 12px",
+                "fontSize": 12, "color": T2, "fontFamily": FONT_BODY,
+            }),
+        ],
+        style={"display": "flex", "alignItems": "center", "gap": 12}
+    )
+
+    return html.Div([logo, right], style={
+        "display": "flex", "alignItems": "center", "justifyContent": "space-between",
+        "height": 56, "padding": "0 28px",
+        "background": f"rgba(13,17,23,0.95)",
+        "borderBottom": f"1px solid {BD}",
+        "backdropFilter": "blur(12px)",
+        "position": "sticky", "top": 0, "zIndex": 1000,
+        "fontFamily": FONT_BODY,
+    })
+
+
+def make_btn_dark(label: str, **kwargs) -> "html.Button":
+    """Bouton style Voxa dark."""
+    from dash import html
+    style = {
+        "padding": "6px 14px", "borderRadius": 8,
+        "border": f"1px solid {BD2}", "background": BG3,
+        "fontFamily": FONT_BODY, "fontSize": 12, "fontWeight": 600,
+        "cursor": "pointer", "color": T2, "transition": "all 0.2s",
+    }
+    style.update(kwargs.get("style", {}))
+    return html.Button(label, style=style, **{k:v for k,v in kwargs.items() if k != "style"})
+
+
+def make_btn_primary(label: str, **kwargs) -> "html.Button":
+    """Bouton CTA gradient Voxa."""
+    from dash import html
+    style = {
+        "padding": "7px 16px", "borderRadius": 8, "border": "none",
+        "background": GRD, "fontFamily": FONT_BODY,
+        "fontSize": 12, "fontWeight": 700, "cursor": "pointer",
+        "color": BG, "transition": "all 0.2s",
+    }
+    style.update(kwargs.get("style", {}))
+    return html.Button(label, style=style, **{k:v for k,v in kwargs.items() if k != "style"})
 
 
 if __name__ == "__main__":

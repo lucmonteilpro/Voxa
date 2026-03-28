@@ -554,59 +554,33 @@ server = app.server
 # LAYOUT
 # ─────────────────────────────────────────────
 
-TOPBAR = html.Div([
-    # Left
-    html.Div([
-        html.Div("V", style={
-            "width": 32, "height": 32, "borderRadius": 8,
-            "background": "linear-gradient(135deg,#4f46e5,#7c3aed)",
-            "display": "flex", "alignItems": "center", "justifyContent": "center",
-            "fontSize": 15, "fontWeight": 800, "color": T.W, "flexShrink": 0,
-        }),
-        html.Span("voxa", style={"fontWeight": 800, "fontSize": 18,
-                                  "letterSpacing": "-0.5px"}),
-        html.Span("GEO Intelligence", style={
-            "fontSize": 9, "fontWeight": 700, "letterSpacing": "1.5px",
-            "textTransform": "uppercase", "padding": "3px 9px",
-            "borderRadius": 20, "background": "rgba(0,229,255,0.10)", "color": "#00E5FF",
-        }),
-    ], style={"display": "flex", "alignItems": "center", "gap": 10}),
-
-    # Right
-    html.Div([
+TOPBAR = T.make_topbar(
+    client_name = CLIENT_NAME,
+    vertical    = "sport",
+    right_children = [
         html.Div(id="demo-badge"),
         html.Div([
-            html.Button("🇫🇷 FR", id="btn-fr", n_clicks=0,
-                        style={"padding": "5px 12px", "borderRadius": "8px 0 0 8px",
-                               "border": "1px solid #e5e7eb", "background": T.W,
-                               "fontFamily": T.FONT_BODY, "fontSize": 12,
-                               "fontWeight": 600, "cursor": "pointer"}),
-            html.Button("🇬🇧 EN", id="btn-en", n_clicks=0,
-                        style={"padding": "5px 12px", "borderRadius": "0 8px 8px 0",
-                               "border": "1px solid #e5e7eb", "borderLeft": "none",
-                               "background": T.W,
-                               "fontFamily": T.FONT_BODY, "fontSize": 12,
-                               "fontWeight": 600, "cursor": "pointer"}),
+            html.Button("🇫🇷 FR", id="btn-fr", n_clicks=0, style={
+                "padding": "5px 12px", "borderRadius": "8px 0 0 8px",
+                "border": f"1px solid {T.BD}", "background": T.BG3,
+                "fontFamily": T.FONT_BODY, "fontSize": 12,
+                "fontWeight": 600, "cursor": "pointer", "color": T.T2,
+            }),
+            html.Button("🇬🇧 EN", id="btn-en", n_clicks=0, style={
+                "padding": "5px 12px", "borderRadius": "0 8px 8px 0",
+                "border": f"1px solid {T.BD}", "borderLeft": "none",
+                "background": T.BG3,
+                "fontFamily": T.FONT_BODY, "fontSize": 12,
+                "fontWeight": 600, "cursor": "pointer", "color": T.T2,
+            }),
         ], style={"display": "flex"}),
         html.A("↓ Export CSV", id="export-link", href="/export/psg/csv?lang=fr",
                style={"padding": "6px 14px", "borderRadius": 8,
-                      "border": "1px solid #e5e7eb", "background": T.W,
+                      "border": f"1px solid {T.BD}", "background": T.BG3,
                       "fontSize": 12, "fontWeight": 600, "color": T.T2,
                       "textDecoration": "none"}),
-        html.Div([
-            "Client : ",
-            html.Strong(CLIENT_NAME),
-        ], style={"background": T.BG, "border": "1px solid #e5e7eb",
-                  "borderRadius": 8, "padding": "5px 12px",
-                  "fontSize": 12, "color": T.T2}),
-    ], style={"display": "flex", "alignItems": "center", "gap": 12}),
-], style={
-    "display": "flex", "alignItems": "center", "justifyContent": "space-between",
-    "height": 56, "padding": "0 32px",
-    "background": T.W, "borderBottom": "1px solid #e5e7eb",
-    "position": "sticky", "top": 0, "zIndex": 100,
-    "fontFamily": T.FONT_BODY,
-})
+    ]
+)
 
 
 app.layout = html.Div([
