@@ -336,6 +336,12 @@ def _demo_geo_score(brand, vert, mkt):
             r = client.messages.create(model=MODEL_H, max_tokens=250,
                 messages=[{"role":"user","content":pt}])
             ans = r.content[0].text
+            # Nettoyer le markdown pour l'affichage HTML
+            import re as _re
+            ans_clean = _re.sub(r'\*\*(.+?)\*\*', r'\1', ans)  # **bold**
+            ans_clean = _re.sub(r'\*(.+?)\*', r'\1', ans_clean)  # *italic*
+            ans_clean = _re.sub(r'^#{1,3}\s+', '', ans_clean, flags=_re.MULTILINE)  # # headers
+            ans_clean = ans_clean.strip()
             mentioned = brand.lower() in ans.lower()
             pos_w = ["excellent","meilleur","top","recommande","fiable","fort","leader"]
             neg_w = ["problème","difficile","faible","mauvais","éviter"]
@@ -344,7 +350,7 @@ def _demo_geo_score(brand, vert, mkt):
             score = (40 if mentioned else 0) + (30 if mentioned else 0) + \
                     (20 if sent == "positive" else 0) + 10
             total += score
-            results.append({"prompt":pt,"answer":ans[:260]+"..." if len(ans)>260 else ans,
+            results.append({"prompt":pt,"answer":ans_clean[:260]+"..." if len(ans_clean)>260 else ans_clean,
                             "mentioned":mentioned,"sentiment":sent,"score":score})
         except Exception as e:
             results.append({"prompt":pt,"answer":str(e),"mentioned":False,"sentiment":"neutral","score":0})

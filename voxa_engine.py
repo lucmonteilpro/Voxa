@@ -35,18 +35,18 @@ MODEL_H = "claude-haiku-4-5-20251001"
 
 VOTE_PROMPTS = {
     "sport": {
-        "fr": "Quels clubs de football ou organisations sportives cites-tu le plus souvent avec {brand} ? Liste uniquement les noms, séparés par des virgules.",
-        "en": "What sports clubs or organizations do you most often mention alongside {brand}? Names only, comma-separated.",
-        "pt": "Quais clubes são mais frequentemente mencionados com {brand}? Apenas nomes, separados por vírgulas.",
+        "fr": "Dans le marché du football et du sport en France, quelles sont les marques et clubs les plus souvent mentionnés dans le même contexte que {brand} ? Liste uniquement les noms, séparés par des virgules, sans explication.",
+        "en": "In the football and sports market, which brands and clubs are most often mentioned in the same context as {brand}? List names only, comma-separated, no explanation.",
+        "pt": "No mercado de futebol, quais marcas são mais frequentemente mencionadas no mesmo contexto que {brand}? Apenas nomes, separados por vírgulas.",
     },
     "bet": {
-        "fr": "Quels sites de paris sportifs cites-tu le plus souvent avec {brand} ? Noms uniquement, séparés par des virgules.",
-        "en": "What sports betting sites do you most often mention alongside {brand}? Names only, comma-separated.",
-        "pt": "Quais sites de apostas mencionas mais com {brand}? Apenas nomes, separados por vírgulas.",
+        "fr": "Dans le marché des paris sportifs en France, quels sont les sites et opérateurs les plus souvent mentionnés dans le même contexte que {brand} ? Liste uniquement les noms, séparés par des virgules, sans explication.",
+        "en": "In the sports betting market, which sites and operators are most often mentioned in the same context as {brand}? Names only, comma-separated, no explanation.",
+        "pt": "No mercado de apostas desportivas, quais operadores são mais frequentemente mencionados com {brand}? Apenas nomes, separados por vírgulas.",
     },
     "politics": {
-        "fr": "Quels partis ou candidats cites-tu le plus souvent avec {brand} ? Noms uniquement, séparés par des virgules.",
-        "en": "What political parties or candidates do you most often mention alongside {brand}? Names only, comma-separated.",
+        "fr": "Dans le paysage politique français, quels partis et candidats sont les plus souvent mentionnés dans le même contexte que {brand} ? Liste uniquement les noms, séparés par des virgules, sans explication.",
+        "en": "In the political landscape, which parties and candidates are most often mentioned in the same context as {brand}? Names only, comma-separated, no explanation.",
     },
 }
 
