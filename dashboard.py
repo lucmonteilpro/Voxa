@@ -222,9 +222,9 @@ def has_demo_data() -> bool:
 # ─────────────────────────────────────────────
 
 def score_color(s):
-    if s >= 70: return "#16a34a"
-    if s >= 45: return "#d97706"
-    return "#dc2626"
+    if s >= 70: return "#00FFAA"
+    if s >= 45: return "#F59E0B"
+    return "#FF4B6E"
 
 # ─────────────────────────────────────────────
 # CHART BUILDERS
@@ -243,8 +243,8 @@ def build_history_chart(lang: str) -> go.Figure:
         fig.add_trace(go.Scatter(
             x=df["date"], y=df["geo_score"].round(1),
             mode="lines+markers",
-            line=dict(color="#4f46e5", width=2.5, shape="spline"),
-            marker=dict(color="#4f46e5", size=7),
+            line=dict(color="#00E5FF", width=2.5, shape="spline"),
+            marker=dict(color="#00E5FF", size=7),
             fill="tozeroy",
             fillcolor="rgba(79,70,229,0.08)",
             hovertemplate="<b>%{x}</b><br>Score : %{y}/100<extra></extra>",
@@ -255,7 +255,7 @@ def build_history_chart(lang: str) -> go.Figure:
         height=220,
         font=dict(family=T.FONT_BODY, size=11, color=T.T2),
         xaxis=dict(showgrid=False, zeroline=False, tickformat="%d %b"),
-        yaxis=dict(showgrid=True, gridcolor="#f3f4f6", zeroline=False, range=[0, 105]),
+        yaxis=dict(showgrid=True, gridcolor="#0D1117", zeroline=False, range=[0, 105]),
         hoverlabel=dict(bgcolor=T.W, font_size=12),
     )
     return fig
@@ -268,7 +268,7 @@ def build_bar_chart(scores_df: pd.DataFrame) -> go.Figure:
     # Trier par score croissant (Plotly affiche de bas en haut → #1 en haut)
     df = scores_df.sort_values("geo_score", ascending=True).reset_index(drop=True)
 
-    colors  = ["#4f46e5" if r["brand"] == PRIMARY_BRAND
+    colors  = ["#00E5FF" if r["brand"] == PRIMARY_BRAND
                else CLUB_COLORS.get(r["brand"], T.T3)
                for _, r in df.iterrows()]
     opacities = [1.0 if r["brand"] == PRIMARY_BRAND else 0.5
@@ -290,7 +290,7 @@ def build_bar_chart(scores_df: pd.DataFrame) -> go.Figure:
         paper_bgcolor=T.W, plot_bgcolor=T.W,
         margin=dict(l=4, r=60, t=4, b=4),
         height=max(200, len(df) * 28),
-        xaxis=dict(range=[0, 105], showgrid=True, gridcolor="#f3f4f6",
+        xaxis=dict(range=[0, 105], showgrid=True, gridcolor="#0D1117",
                    zeroline=False, tickfont=dict(size=11)),
         yaxis=dict(showgrid=False, zeroline=False,
                    tickfont=dict(size=12, family=T.FONT_BODY),
@@ -320,13 +320,13 @@ def hero_section(scores_df: pd.DataFrame, lang: str) -> html.Div:
                         else "Visibilité partielle" if primary_score >= 45
                         else "Faible visibilité")
     flag      = "🇫🇷" if lang == "fr" else "🇬🇧"
-    nss_color = "#16a34a" if primary_nss >= 0 else "#dc2626"
+    nss_color = "#00FFAA" if primary_nss >= 0 else "#FF4B6E"
     nss_label = f"+{primary_nss:.0f}%" if primary_nss >= 0 else f"{primary_nss:.0f}%"
 
     ring_fig = go.Figure(go.Pie(
         values=[primary_score, max(100 - primary_score, 0)],
         hole=0.78, sort=False, direction="clockwise", rotation=90,
-        marker=dict(colors=[sc, "#f3f4f6"], line=dict(width=0)),
+        marker=dict(colors=[sc, "#0D1117"], line=dict(width=0)),
         hoverinfo="skip", textinfo="none",
     ))
     ring_fig.update_layout(
@@ -374,7 +374,7 @@ def hero_section(scores_df: pd.DataFrame, lang: str) -> html.Div:
                                                    "letterSpacing": "1px",
                                                    "color": T.T3, "marginTop": 3}),
                 ]),
-                html.Div(style={"width": 1, "background": "#e5e7eb",
+                html.Div(style={"width": 1, "background": "#1E2A3A",
                                 "margin": "0 28px"}),
                 html.Div([
                     html.Div(str(primary_mentions),
@@ -385,7 +385,7 @@ def hero_section(scores_df: pd.DataFrame, lang: str) -> html.Div:
                                                 "letterSpacing": "1px",
                                                 "color": T.T3, "marginTop": 3}),
                 ]),
-                html.Div(style={"width": 1, "background": "#e5e7eb",
+                html.Div(style={"width": 1, "background": "#1E2A3A",
                                 "margin": "0 28px"}),
                 html.Div([
                     html.Div(nss_label,
@@ -396,7 +396,7 @@ def hero_section(scores_df: pd.DataFrame, lang: str) -> html.Div:
                                                      "letterSpacing": "1px",
                                                      "color": T.T3, "marginTop": 3}),
                 ]),
-                html.Div(style={"width": 1, "background": "#e5e7eb",
+                html.Div(style={"width": 1, "background": "#1E2A3A",
                                 "margin": "0 28px"}),
                 html.Div([
                     html.Div(str(n_prompts),
@@ -426,23 +426,23 @@ def prompt_cards(df: pd.DataFrame) -> list:
     for _, row in df.iterrows():
         sc    = score_color(row["geo_score"])
         icon  = "✓" if row["mentioned"] else "✗"
-        ic    = "#16a34a" if row["mentioned"] else "#dc2626"
+        ic    = "#00FFAA" if row["mentioned"] else "#FF4B6E"
         cat   = CATEGORY_LABELS.get(row["category"], row["category"])
         pos   = {"early": "↑ Début", "mid": "→ Milieu", "late": "↓ Fin"}.get(
                     row.get("position"), "—")
         sent  = row.get("sentiment") or "—"
-        sent_c = {"positive": "#16a34a", "neutral": "#d97706",
-                  "negative": "#dc2626"}.get(sent, T.T3)
-        sent_bg = {"positive": "#dcfce7", "neutral": "#fef3c7",
-                   "negative": "#fee2e2"}.get(sent, "#f3f4f6")
+        sent_c = {"positive": "#00FFAA", "neutral": "#F59E0B",
+                  "negative": "#FF4B6E"}.get(sent, T.T3)
+        sent_bg = {"positive": "rgba(0,255,170,0.10)", "neutral": "rgba(245,158,11,0.15)",
+                   "negative": "rgba(255,75,110,0.10)"}.get(sent, "#0D1117")
         cat_styles = {
-            "discovery":     ("Découverte",    "#4f46e5", "#eef2ff"),
-            "comparison":    ("Comparatif",    "#0369a1", "#e0f2fe"),
-            "transactional": ("Transactionnel","#15803d", "#dcfce7"),
-            "reputation":    ("Réputation",    "#92400e", "#fef3c7"),
+            "discovery":     ("Découverte",    "#00E5FF", "rgba(0,229,255,0.10)"),
+            "comparison":    ("Comparatif",    "#00E5FF", "rgba(0,229,255,0.08)"),
+            "transactional": ("Transactionnel","#00FFAA", "rgba(0,255,170,0.10)"),
+            "reputation":    ("Réputation",    "#F59E0B", "rgba(245,158,11,0.15)"),
         }
         cat_label, cat_color, cat_bg = cat_styles.get(
-            row["category"], (row["category"], T.T2, "#f3f4f6"))
+            row["category"], (row["category"], T.T2, "#0D1117"))
 
         raw_block = []
         raw = str(row.get("raw_response", "") or "")
@@ -475,7 +475,7 @@ def prompt_cards(df: pd.DataFrame) -> list:
                     html.Span(pos,
                               style={"fontSize": 10, "fontWeight": 600,
                                      "padding": "3px 10px", "borderRadius": 20,
-                                     "background": "#f3f4f6", "color": T.T2,
+                                     "background": "#0D1117", "color": T.T2,
                                      "marginRight": 6}),
                     html.Span(sent,
                               style={"fontSize": 10, "fontWeight": 700,
@@ -485,7 +485,7 @@ def prompt_cards(df: pd.DataFrame) -> list:
                     html.Span(f"{int(row['mentions'])}× mention",
                               style={"fontSize": 10, "fontWeight": 600,
                                      "padding": "3px 10px", "borderRadius": 20,
-                                     "background": "#eef2ff", "color": "#4f46e5"}),
+                                     "background": "rgba(0,229,255,0.10)", "color": "#00E5FF"}),
                 ]),
             ] + raw_block, style={"flex": 1}),
 
@@ -511,7 +511,7 @@ def compare_table(df: pd.DataFrame) -> dbc.Table:
     rows = []
     for _, r in df.iterrows():
         is_p  = r["brand"] == PRIMARY_BRAND
-        dc    = "#16a34a" if r["delta"] > 0 else "#dc2626" if r["delta"] < 0 else T.T3
+        dc    = "#00FFAA" if r["delta"] > 0 else "#FF4B6E" if r["delta"] < 0 else T.T3
         dl    = f"+{r['delta']:.0f}" if r["delta"] > 0 else f"{r['delta']:.0f}"
         rows.append(html.Tr([
             html.Td(f"{r['brand']} {'★' if is_p else ''}",
@@ -568,7 +568,7 @@ TOPBAR = html.Div([
         html.Span("GEO Intelligence", style={
             "fontSize": 9, "fontWeight": 700, "letterSpacing": "1.5px",
             "textTransform": "uppercase", "padding": "3px 9px",
-            "borderRadius": 20, "background": "#eef2ff", "color": "#4f46e5",
+            "borderRadius": 20, "background": "rgba(0,229,255,0.10)", "color": "#00E5FF",
         }),
     ], style={"display": "flex", "alignItems": "center", "gap": 10}),
 
@@ -631,7 +631,7 @@ app.layout = html.Div([
                                  "textTransform": "uppercase",
                                  "letterSpacing": "0.8px",
                                  "fontFamily": T.FONT_BODY,
-                                 "color": "#B8962E"}),
+                                 "color": "#00E5FF"}),
             dbc.Tab(label="Bibliothèque prompts", tab_id="library",
                     label_style={"fontSize": 12, "fontWeight": 700,
                                  "textTransform": "uppercase",
@@ -648,7 +648,7 @@ app.layout = html.Div([
     ], style={"maxWidth": 1280, "margin": "0 auto",
               "padding": "28px 32px 60px",
               "fontFamily": T.FONT_BODY}),
-], style={"background": "#f4f5f9", "minHeight": "100vh"})
+], style={"background": "#0D1117", "minHeight": "100vh"})
 
 # ─────────────────────────────────────────────
 # CALLBACKS
@@ -676,11 +676,11 @@ def update_export(lang):
 def update_banner(_):
     if has_demo_data():
         return html.Div([
-            html.Span("◈ ", style={"color": "#d97706"}),
+            html.Span("◈ ", style={"color": "#F59E0B"}),
             "Données simulées (mode démo) — non représentatives d'un run API réel",
         ], style={
-            "background": "#fffbeb", "borderTop": "1px solid #fde68a",
-            "padding": "7px 32px", "fontSize": 11, "color": "#92400e",
+            "background": "rgba(245,158,11,0.08)", "borderTop": "1px solid #fde68a",
+            "padding": "7px 32px", "fontSize": 11, "color": "#F59E0B",
         })
     return None
 
@@ -692,7 +692,7 @@ def update_demo_badge(_):
         return html.Span("Démo", style={
             "fontSize": 9, "fontWeight": 700, "letterSpacing": "1.5px",
             "textTransform": "uppercase", "padding": "3px 9px",
-            "borderRadius": 20, "background": "#fef3c7", "color": "#d97706",
+            "borderRadius": 20, "background": "rgba(245,158,11,0.15)", "color": "#F59E0B",
         })
     return None
 
@@ -758,7 +758,7 @@ def render_tab(active_tab, lang):
                                 (f"+{row['net_sentiment']:.0f}%" if row["net_sentiment"] >= 0
                                  else f"{row['net_sentiment']:.0f}%"),
                                 style={"fontSize": 26, "fontWeight": 800,
-                                       "color": "#16a34a" if row["net_sentiment"] >= 0 else "#dc2626"}),
+                                       "color": "#00FFAA" if row["net_sentiment"] >= 0 else "#FF4B6E"}),
                         ], style={
                             "border": "1px solid #e5e7eb", "borderRadius": 10,
                             "padding": "14px 16px", "textAlign": "center",
@@ -815,12 +815,12 @@ def render_tab(active_tab, lang):
             for _, row in df_lib.iterrows():
                 flag = "🇫🇷" if row["language"] == "fr" else "🇬🇧"
                 cat_styles = {
-                    "discovery":     ("#4f46e5", "#eef2ff"),
-                    "comparison":    ("#0369a1", "#e0f2fe"),
-                    "transactional": ("#15803d", "#dcfce7"),
-                    "reputation":    ("#92400e", "#fef3c7"),
+                    "discovery":     ("#00E5FF", "rgba(0,229,255,0.10)"),
+                    "comparison":    ("#00E5FF", "rgba(0,229,255,0.08)"),
+                    "transactional": ("#00FFAA", "rgba(0,255,170,0.10)"),
+                    "reputation":    ("#F59E0B", "rgba(245,158,11,0.15)"),
                 }
-                cc, cbg = cat_styles.get(row["category"], (T.T2, "#f3f4f6"))
+                cc, cbg = cat_styles.get(row["category"], (T.T2, "#0D1117"))
                 cat_label = CATEGORY_LABELS.get(row["category"], row["category"])
                 rows.append(html.Tr([
                     html.Td(flag, style={"fontSize": 18}),
@@ -833,8 +833,8 @@ def render_tab(active_tab, lang):
                     html.Td(row["text"], style={"fontSize": 13}),
                     html.Td(html.Span(str(row["n_runs"]) if row["n_runs"] else "—",
                                      style={"fontSize": 11, "fontWeight": 700,
-                                            "color": "#4f46e5",
-                                            "background": "#eef2ff",
+                                            "color": "#00E5FF",
+                                            "background": "rgba(0,229,255,0.10)",
                                             "padding": "2px 8px",
                                             "borderRadius": 20}) if row["n_runs"]
                             else html.Span("—", style={"color": T.T3})),
@@ -909,9 +909,9 @@ def render_tab(active_tab, lang):
                     })
 
         priority_styles = {
-            "haute":   {"border": "#dc2626", "bg": "#fef2f2", "badge_bg": "#fee2e2", "badge_color": "#dc2626"},
-            "moyenne": {"border": "#d97706", "bg": "#fffbeb", "badge_bg": "#fef3c7", "badge_color": "#92400e"},
-            "info":    {"border": "#16a34a", "bg": "#f0fdf4", "badge_bg": "#dcfce7", "badge_color": "#15803d"},
+            "haute":   {"border": "#FF4B6E", "bg": "rgba(255,75,110,0.08)", "badge_bg": "rgba(255,75,110,0.10)", "badge_color": "#FF4B6E"},
+            "moyenne": {"border": "#F59E0B", "bg": "rgba(245,158,11,0.08)", "badge_bg": "rgba(245,158,11,0.15)", "badge_color": "#F59E0B"},
+            "info":    {"border": "#00FFAA", "bg": "rgba(0,255,170,0.06)", "badge_bg": "rgba(0,255,170,0.10)", "badge_color": "#00FFAA"},
         }
 
         def reco_card(reco, is_persistent=False):
@@ -932,7 +932,7 @@ def render_tab(active_tab, lang):
                     *([impact_badge] if impact_badge else []),
                 ], style={"marginBottom": 6}),
                 html.Div(reco.get("body",""), style={
-                    "fontSize": 12, "color": "#4b5563", "lineHeight": "1.7",
+                    "fontSize": 12, "color": "#A8B8C8", "lineHeight": "1.7",
                     "paddingLeft": 24}),
                 *([html.Div(f"Prompt : « {reco['prompt_text'][:80]}… »", style={
                     "fontSize": 10, "color": T.T3, "marginTop": 4, "paddingLeft": 24,
@@ -953,7 +953,7 @@ def render_tab(active_tab, lang):
                 html.Strong(a["title"]), f" — {a['body']}",
                 html.Span(f"  {a['created_at'][:10]}", style={"fontSize":10,"color":T.T3,"marginLeft":8}),
             ], style={"fontSize":12,"padding":"8px 12px","marginBottom":6,
-                      "background":"#fffbeb","borderRadius":8,"borderLeft":"3px solid #d97706"})
+                      "background":"rgba(245,158,11,0.08)","borderRadius":8,"borderLeft":"3px solid #d97706"})
             for a in alerts]
             alert_section = html.Div([
                 html.Div("ALERTES ACTIVES", style={"fontSize":10,"fontWeight":700,
@@ -1017,7 +1017,7 @@ def render_tab(active_tab, lang):
                 html.Div("Stack technique · MVP", style={
                     "fontSize": 11, "fontWeight": 700,
                     "textTransform": "uppercase", "letterSpacing": "1px",
-                    "color": "#4f46e5", "marginBottom": 12,
+                    "color": "#00E5FF", "marginBottom": 12,
                 }),
                 *[html.Div([
                     html.Span(k, style={"width": 100, "color": T.T3,
@@ -1086,7 +1086,7 @@ app.layout.children.append(
             "Voxa GEO Intelligence · ",
             html.A("luc@sharper-media.com",
                    href="mailto:luc@sharper-media.com",
-                   style={"color": "#B8962E", "textDecoration": "none"}),
+                   style={"color": "#00E5FF", "textDecoration": "none"}),
         ]),
     ], className="voxa-footer")
 )

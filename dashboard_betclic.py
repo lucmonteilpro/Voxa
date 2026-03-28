@@ -361,9 +361,9 @@ def generate_recommendations(market: str) -> list:
 # ─────────────────────────────────────────────
 
 def score_color(s):
-    if s >= 70: return "#16a34a"
-    if s >= 45: return "#d97706"
-    return "#dc2626"
+    if s >= 70: return "#00FFAA"
+    if s >= 45: return "#F59E0B"
+    return "#FF4B6E"
 
 
 # ─────────────────────────────────────────────
@@ -374,7 +374,7 @@ def build_bar_chart(scores_df: pd.DataFrame) -> go.Figure:
     if scores_df.empty:
         return go.Figure()
     df = scores_df.sort_values("geo_score", ascending=True).reset_index(drop=True)
-    colors   = ["#4f46e5" if r["brand"] == PRIMARY_BRAND
+    colors   = ["#00E5FF" if r["brand"] == PRIMARY_BRAND
                 else BRAND_COLORS.get(r["brand"], T.T3)
                 for _, r in df.iterrows()]
     opacities = [1.0 if r["brand"] == PRIMARY_BRAND else 0.5
@@ -389,7 +389,7 @@ def build_bar_chart(scores_df: pd.DataFrame) -> go.Figure:
         paper_bgcolor=T.W, plot_bgcolor=T.W,
         margin=dict(l=4, r=40, t=4, b=4),
         height=max(180, len(df) * 36),
-        xaxis=dict(range=[0, 105], showgrid=True, gridcolor="#f3f4f6",
+        xaxis=dict(range=[0, 105], showgrid=True, gridcolor="#0D1117",
                    zeroline=False, tickfont=dict(size=11)),
         yaxis=dict(showgrid=False, zeroline=False, automargin=True,
                    tickfont=dict(size=12, family=T.FONT_BODY)),
@@ -412,8 +412,8 @@ def build_history_chart(market: str, category: str = "all", llm: str = "all") ->
         fig.add_trace(go.Scatter(
             x=df["date"], y=df["geo_score"].round(1),
             mode="lines+markers",
-            line=dict(color="#4f46e5", width=2.5, shape="spline"),
-            marker=dict(color="#4f46e5", size=7),
+            line=dict(color="#00E5FF", width=2.5, shape="spline"),
+            marker=dict(color="#00E5FF", size=7),
             fill="tozeroy", fillcolor="rgba(79,70,229,0.08)",
             hovertemplate="<b>%{x}</b><br>Score : %{y}/100<extra></extra>",
         ))
@@ -422,7 +422,7 @@ def build_history_chart(market: str, category: str = "all", llm: str = "all") ->
         margin=dict(l=8, r=8, t=8, b=8), height=200,
         font=dict(family=T.FONT_BODY, size=11, color=T.T2),
         xaxis=dict(showgrid=False, zeroline=False, tickformat="%d %b"),
-        yaxis=dict(showgrid=True, gridcolor="#f3f4f6",
+        yaxis=dict(showgrid=True, gridcolor="#0D1117",
                    zeroline=False, range=[0, 105]),
     )
     return fig
@@ -434,10 +434,10 @@ def build_radar_chart() -> go.Figure:
     cat_keys   = list(CATEGORY_LABELS.keys())
     fig = go.Figure()
     colors_map = {
-        "fr":    "#4f46e5",
-        "pt":    "#16a34a",
-        "fr-ci": "#d97706",
-        "pl":    "#dc2626",
+        "fr":    "#00E5FF",
+        "pt":    "#00FFAA",
+        "fr-ci": "#F59E0B",
+        "pl":    "#FF4B6E",
     }
     for market, label in MARKETS.items():
         scores = []
@@ -514,14 +514,14 @@ def hero_section(market: str, category: str = "all", llm: str = "all") -> html.D
     label_score      = ("Bonne visibilité IA" if primary_score >= 70
                         else "Visibilité partielle" if primary_score >= 45
                         else "Faible visibilité")
-    nss_color  = "#16a34a" if primary_nss >= 0 else "#dc2626"
+    nss_color  = "#00FFAA" if primary_nss >= 0 else "#FF4B6E"
     nss_label  = f"+{primary_nss:.0f}%" if primary_nss >= 0 else f"{primary_nss:.0f}%"
     cat_label  = CATEGORY_LABELS.get(category, "Toutes catégories") if category != "all" else "Toutes catégories"
 
     ring_fig = go.Figure(go.Pie(
         values=[primary_score, max(100 - primary_score, 0)],
         hole=0.78, sort=False, direction="clockwise", rotation=90,
-        marker=dict(colors=[sc, "#f3f4f6"], line=dict(width=0)),
+        marker=dict(colors=[sc, "#0D1117"], line=dict(width=0)),
         hoverinfo="skip", textinfo="none",
     ))
     ring_fig.update_layout(
@@ -564,7 +564,7 @@ def hero_section(market: str, category: str = "all", llm: str = "all") -> html.D
                              style={"fontSize": 10, "fontWeight": 700, "textTransform": "uppercase",
                                     "letterSpacing": "1px", "color": T.T3, "marginTop": 3}),
                 ]),
-                html.Div(style={"width": 1, "background": "#e5e7eb", "margin": "0 28px"}),
+                html.Div(style={"width": 1, "background": "#1E2A3A", "margin": "0 28px"}),
                 html.Div([
                     html.Div(str(primary_mentions),
                              style={"fontSize": 24, "fontWeight": 800,
@@ -573,7 +573,7 @@ def hero_section(market: str, category: str = "all", llm: str = "all") -> html.D
                              style={"fontSize": 10, "fontWeight": 700, "textTransform": "uppercase",
                                     "letterSpacing": "1px", "color": T.T3, "marginTop": 3}),
                 ]),
-                html.Div(style={"width": 1, "background": "#e5e7eb", "margin": "0 28px"}),
+                html.Div(style={"width": 1, "background": "#1E2A3A", "margin": "0 28px"}),
                 html.Div([
                     html.Div(nss_label,
                              style={"fontSize": 24, "fontWeight": 800,
@@ -582,7 +582,7 @@ def hero_section(market: str, category: str = "all", llm: str = "all") -> html.D
                              style={"fontSize": 10, "fontWeight": 700, "textTransform": "uppercase",
                                     "letterSpacing": "1px", "color": T.T3, "marginTop": 3}),
                 ]),
-                html.Div(style={"width": 1, "background": "#e5e7eb", "margin": "0 28px"}),
+                html.Div(style={"width": 1, "background": "#1E2A3A", "margin": "0 28px"}),
                 html.Div([
                     html.Div(str(n_prompts),
                              style={"fontSize": 24, "fontWeight": 800,
@@ -608,20 +608,20 @@ def prompt_cards(df: pd.DataFrame) -> list:
     for _, row in df.iterrows():
         sc    = score_color(row["geo_score"])
         icon  = "✓" if row["mentioned"] else "✗"
-        ic    = "#16a34a" if row["mentioned"] else "#dc2626"
+        ic    = "#00FFAA" if row["mentioned"] else "#FF4B6E"
         cat_styles = {
-            "visibility": ("Visibilité",      "#4f46e5", "#eef2ff"),
-            "brand":      ("Image de marque", "#0369a1", "#e0f2fe"),
-            "odds":       ("Cotes",           "#92400e", "#fef3c7"),
-            "regulation": ("Régulation",      "#15803d", "#dcfce7"),
-            "payment":    ("Paiement",        "#7e22ce", "#f3e8ff"),
+            "visibility": ("Visibilité",      "#00E5FF", "rgba(0,229,255,0.10)"),
+            "brand":      ("Image de marque", "#00E5FF", "rgba(0,229,255,0.08)"),
+            "odds":       ("Cotes",           "#F59E0B", "rgba(245,158,11,0.15)"),
+            "regulation": ("Régulation",      "#00FFAA", "rgba(0,255,170,0.10)"),
+            "payment":    ("Paiement",        "#7B4DFF", "rgba(123,77,255,0.10)"),
         }
         cat_label, cat_color, cat_bg = cat_styles.get(
-            row["category"], (row["category"], T.T2, "#f3f4f6"))
+            row["category"], (row["category"], T.T2, "#0D1117"))
         pos   = {"early": "↑ Début", "mid": "→ Milieu", "late": "↓ Fin"}.get(row.get("position"), "—")
         sent  = row.get("sentiment") or "—"
-        sc_s  = {"positive": "#16a34a", "neutral": "#d97706", "negative": "#dc2626"}.get(sent, T.T3)
-        bg_s  = {"positive": "#dcfce7", "neutral": "#fef3c7", "negative": "#fee2e2"}.get(sent, "#f3f4f6")
+        sc_s  = {"positive": "#00FFAA", "neutral": "#F59E0B", "negative": "#FF4B6E"}.get(sent, T.T3)
+        bg_s  = {"positive": "rgba(0,255,170,0.10)", "neutral": "rgba(245,158,11,0.15)", "negative": "rgba(255,75,110,0.10)"}.get(sent, "#0D1117")
         raw   = str(row.get("raw_response", "") or "")
         raw_block = []
         if raw and raw != "nan" and len(raw) > 10:
@@ -644,13 +644,13 @@ def prompt_cards(df: pd.DataFrame) -> list:
                         "textTransform": "uppercase", "letterSpacing": "0.5px", "marginRight": 6}),
                     html.Span(pos, style={
                         "fontSize": 10, "fontWeight": 600, "padding": "3px 10px",
-                        "borderRadius": 20, "background": "#f3f4f6", "color": T.T2, "marginRight": 6}),
+                        "borderRadius": 20, "background": "#0D1117", "color": T.T2, "marginRight": 6}),
                     html.Span(sent, style={
                         "fontSize": 10, "fontWeight": 700, "padding": "3px 10px",
                         "borderRadius": 20, "background": bg_s, "color": sc_s, "marginRight": 6}),
                     html.Span(f"{int(row['mentions'])}× mention", style={
                         "fontSize": 10, "fontWeight": 600, "padding": "3px 10px",
-                        "borderRadius": 20, "background": "#eef2ff", "color": "#4f46e5"}),
+                        "borderRadius": 20, "background": "rgba(0,229,255,0.10)", "color": "#00E5FF"}),
                 ]),
             ] + raw_block, style={"flex": 1}),
             html.Div([
@@ -696,7 +696,7 @@ TOPBAR = html.Div([
         html.Span("Betclic · GEO Intelligence", style={
             "fontSize": 9, "fontWeight": 700, "letterSpacing": "1.5px",
             "textTransform": "uppercase", "padding": "3px 9px",
-            "borderRadius": 20, "background": "#fff0f0", "color": "#e63946",
+            "borderRadius": 20, "background": "rgba(255,75,110,0.06)", "color": "#e63946",
         }),
     ], style={"display": "flex", "alignItems": "center", "gap": 10}),
 
@@ -804,7 +804,7 @@ app.layout = html.Div([
     ], style={"maxWidth": 1280, "margin": "0 auto",
               "padding": "28px 32px 60px",
               "fontFamily": T.FONT_BODY}),
-], style={"background": "#f4f5f9", "minHeight": "100vh"})
+], style={"background": "#0D1117", "minHeight": "100vh"})
 
 # ─────────────────────────────────────────────
 # CALLBACKS
@@ -814,10 +814,10 @@ app.layout = html.Div([
 def update_banner(_):
     if has_demo_data():
         return html.Div([
-            html.Span("◈ ", style={"color": "#d97706"}),
+            html.Span("◈ ", style={"color": "#F59E0B"}),
             "Données simulées (mode démo) — non représentatives d'un run API réel",
-        ], style={"background": "#fffbeb", "borderTop": "1px solid #fde68a",
-                  "padding": "7px 32px", "fontSize": 11, "color": "#92400e"})
+        ], style={"background": "rgba(245,158,11,0.08)", "borderTop": "1px solid #fde68a",
+                  "padding": "7px 32px", "fontSize": 11, "color": "#F59E0B"})
     return None
 
 
@@ -827,7 +827,7 @@ def update_badge(_):
         return html.Span("Démo", style={
             "fontSize": 9, "fontWeight": 700, "letterSpacing": "1.5px",
             "textTransform": "uppercase", "padding": "3px 9px",
-            "borderRadius": 20, "background": "#fef3c7", "color": "#d97706"})
+            "borderRadius": 20, "background": "rgba(245,158,11,0.15)", "color": "#F59E0B"})
     return None
 
 
@@ -905,7 +905,7 @@ def render_tab(active_tab, market, cat, llm):
                                     ].empty
                                     else "—",
                                     style={"fontSize": 28, "fontWeight": 800,
-                                           "color": "#4f46e5"}),
+                                           "color": "#00E5FF"}),
                                 html.Div("/100", style={"fontSize": 10, "color": T.T3}),
                             ], style={
                                 "border": "1px solid #e5e7eb", "borderRadius": 10,
@@ -930,8 +930,8 @@ def render_tab(active_tab, market, cat, llm):
                                  if row["net_sentiment"] >= 0
                                  else f"{row['net_sentiment']:.0f}%"),
                                 style={"fontSize": 22, "fontWeight": 800,
-                                       "color": "#16a34a" if row["net_sentiment"] >= 0
-                                               else "#dc2626"}),
+                                       "color": "#00FFAA" if row["net_sentiment"] >= 0
+                                               else "#FF4B6E"}),
                         ], style={
                             "border": "1px solid #e5e7eb", "borderRadius": 10,
                             "padding": "12px 14px", "textAlign": "center", "flex": 1,
@@ -951,9 +951,9 @@ def render_tab(active_tab, market, cat, llm):
 
         # Construire les cartes de recommandation
         priority_styles = {
-            "haute":   {"border": "#dc2626", "bg": "#fef2f2", "badge_bg": "#fee2e2", "badge_color": "#dc2626"},
-            "moyenne": {"border": "#d97706", "bg": "#fffbeb", "badge_bg": "#fef3c7", "badge_color": "#92400e"},
-            "info":    {"border": "#16a34a", "bg": "#f0fdf4", "badge_bg": "#dcfce7", "badge_color": "#15803d"},
+            "haute":   {"border": "#FF4B6E", "bg": "rgba(255,75,110,0.08)", "badge_bg": "rgba(255,75,110,0.10)", "badge_color": "#FF4B6E"},
+            "moyenne": {"border": "#F59E0B", "bg": "rgba(245,158,11,0.08)", "badge_bg": "rgba(245,158,11,0.15)", "badge_color": "#F59E0B"},
+            "info":    {"border": "#00FFAA", "bg": "rgba(0,255,170,0.06)", "badge_bg": "rgba(0,255,170,0.10)", "badge_color": "#00FFAA"},
         }
         reco_cards = []
         for reco in recos:
@@ -970,7 +970,7 @@ def render_tab(active_tab, market, cat, llm):
                         "fontSize": 14, "fontWeight": 700, "color": T.W}),
                 ], style={"marginBottom": 8}),
                 html.Div(reco["body"], style={
-                    "fontSize": 13, "color": "#4b5563", "lineHeight": "1.7",
+                    "fontSize": 13, "color": "#A8B8C8", "lineHeight": "1.7",
                     "paddingLeft": 28}),
             ], style={
                 "borderLeft": f"3px solid {ps['border']}",
@@ -1009,16 +1009,16 @@ def render_tab(active_tab, market, cat, llm):
                 for c in cat_cols:
                     val = int(gap_df.loc[brand, c]) if c in gap_df.columns else 0
                     if is_primary:
-                        bg = "#eef2ff"
-                        color = "#4f46e5"
+                        bg = "rgba(0,229,255,0.10)"
+                        color = "#00E5FF"
                     else:
                         delta = val - betclic_scores.get(c, 0)
                         if delta > 10:
-                            bg = "#fee2e2"
-                            color = "#dc2626"
+                            bg = "rgba(255,75,110,0.10)"
+                            color = "#FF4B6E"
                         elif delta < -10:
-                            bg = "#dcfce7"
-                            color = "#15803d"
+                            bg = "rgba(0,255,170,0.10)"
+                            color = "#00FFAA"
                         else:
                             bg = T.BG
                             color = T.T2
@@ -1051,7 +1051,7 @@ def render_tab(active_tab, market, cat, llm):
                 html.Strong(a["title"]), f" — {a['body']}",
                 html.Span(f"  {a['created_at'][:10]}", style={"fontSize":10,"color":T.T3,"marginLeft":8}),
             ], style={"fontSize":12,"padding":"8px 12px","marginBottom":6,
-                      "background":"#fffbeb","borderRadius":8,"borderLeft":"3px solid #d97706"})
+                      "background":"rgba(245,158,11,0.08)","borderRadius":8,"borderLeft":"3px solid #d97706"})
             for a in db_alerts]
             alert_section = card([
                 card_title("ALERTES ACTIVES"),
@@ -1079,7 +1079,7 @@ def render_tab(active_tab, market, cat, llm):
                         style={"fontSize":10,"color":T.T3,"marginLeft":8})] if impact else []),
                 ], style={"marginBottom": 6}),
                 html.Div(r.get("body",""), style={
-                    "fontSize": 12, "color": "#4b5563", "lineHeight": "1.7",
+                    "fontSize": 12, "color": "#A8B8C8", "lineHeight": "1.7",
                     "paddingLeft": 24}),
                 *([ html.Div(f"Prompt : « {r['prompt_text'][:80]}… »",
                     style={"fontSize":10,"color":T.T3,"marginTop":4,
@@ -1119,12 +1119,12 @@ def render_tab(active_tab, market, cat, llm):
                         html.Div([
                             html.Span("", style={
                                 "display": "inline-block", "width": 10, "height": 10,
-                                "borderRadius": 3, "background": "#dcfce7", "marginRight": 4}),
-                            html.Span("Betclic devant", style={"fontSize": 10, "color": "#15803d", "marginRight": 16}),
+                                "borderRadius": 3, "background": "rgba(0,255,170,0.10)", "marginRight": 4}),
+                            html.Span("Betclic devant", style={"fontSize": 10, "color": "#00FFAA", "marginRight": 16}),
                             html.Span("", style={
                                 "display": "inline-block", "width": 10, "height": 10,
-                                "borderRadius": 3, "background": "#fee2e2", "marginRight": 4}),
-                            html.Span("Concurrent devant", style={"fontSize": 10, "color": "#dc2626"}),
+                                "borderRadius": 3, "background": "rgba(255,75,110,0.10)", "marginRight": 4}),
+                            html.Span("Concurrent devant", style={"fontSize": 10, "color": "#FF4B6E"}),
                         ], style={"marginBottom": 12}),
                         gap_section,
                     ]),
@@ -1200,13 +1200,13 @@ def render_tab(active_tab, market, cat, llm):
             for _, row in df_lib.iterrows():
                 flag = MARKETS.get(row["language"], row["language"])
                 cat_styles = {
-                    "visibility": ("#4f46e5", "#eef2ff", "Visibilité"),
-                    "brand":      ("#0369a1", "#e0f2fe", "Image de marque"),
-                    "odds":       ("#92400e", "#fef3c7", "Cotes"),
-                    "regulation": ("#15803d", "#dcfce7", "Régulation"),
-                    "payment":    ("#7e22ce", "#f3e8ff", "Paiement"),
+                    "visibility": ("#00E5FF", "rgba(0,229,255,0.10)", "Visibilité"),
+                    "brand":      ("#00E5FF", "rgba(0,229,255,0.08)", "Image de marque"),
+                    "odds":       ("#F59E0B", "rgba(245,158,11,0.15)", "Cotes"),
+                    "regulation": ("#00FFAA", "rgba(0,255,170,0.10)", "Régulation"),
+                    "payment":    ("#7B4DFF", "rgba(123,77,255,0.10)", "Paiement"),
                 }
-                cc, cbg, clabel = cat_styles.get(row["category"], (T.T2, "#f3f4f6", row["category"]))
+                cc, cbg, clabel = cat_styles.get(row["category"], (T.T2, "#0D1117", row["category"]))
                 rows.append(html.Tr([
                     html.Td(flag, style={"fontSize": 13}),
                     html.Td(html.Span(clabel, style={
@@ -1216,7 +1216,7 @@ def render_tab(active_tab, market, cat, llm):
                     html.Td(row["text"], style={"fontSize": 13}),
                     html.Td(html.Span(str(row["n_runs"]),
                                      style={"fontSize": 11, "fontWeight": 700,
-                                            "color": "#4f46e5", "background": "#eef2ff",
+                                            "color": "#00E5FF", "background": "rgba(0,229,255,0.10)",
                                             "padding": "2px 8px", "borderRadius": 20})
                             if row["n_runs"]
                             else html.Span("—", style={"color": T.T3})),
@@ -1289,7 +1289,7 @@ app.layout.children.append(
             "Voxa GEO Intelligence · ",
             html.A("luc@sharper-media.com",
                    href="mailto:luc@sharper-media.com",
-                   style={"color": "#B8962E", "textDecoration": "none"}),
+                   style={"color": "#00E5FF", "textDecoration": "none"}),
         ]),
     ], className="voxa-footer")
 )
