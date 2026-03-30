@@ -51,26 +51,44 @@ MODEL_PERP   = "sonar"
 
 PROMPT_TEMPLATES = {
     "sport": {
+        # ── LIGUE 1 — clubs élite ──
         "fr": [
-            {"text": "Quels sont les meilleurs clubs de football en France en 2025 ?", "cat": "discovery"},
-            {"text": "Quel club de Ligue 1 recommandes-tu pour un fan de football français ?", "cat": "discovery"},
-            {"text": "Quels clubs de football français ont la meilleure réputation ?", "cat": "discovery"},
-            {"text": "Quel est le palmarès des meilleurs clubs de football français ?", "cat": "discovery"},
-            {"text": "Quels clubs de football européens sont les plus connus en France ?", "cat": "comparison"},
-            {"text": "Comment se compare {brand} par rapport aux autres clubs de Ligue 1 ?", "cat": "comparison"},
-            {"text": "Quels clubs français participent régulièrement aux compétitions européennes ?", "cat": "comparison"},
-            {"text": "Quel club de football français a la plus grande base de fans ?", "cat": "reputation"},
-            {"text": "Quels clubs de football sont cités comme références en matière de formation ?", "cat": "reputation"},
-            {"text": "Quels clubs français sont reconnus pour leur identité et culture ?", "cat": "reputation"},
-            {"text": "Comment acheter des billets pour un match de football en Ligue 1 ?", "cat": "transactional"},
+            {"text": "Quels sont les clubs de Ligue 1 les plus populaires en France en 2026 ?", "cat": "discovery"},
+            {"text": "Quel club de Ligue 1 recommanderais-tu à un supporter de football français ?", "cat": "discovery"},
+            {"text": "Quels clubs de football français ont la meilleure réputation internationale ?", "cat": "discovery"},
+            {"text": "Quel est le palmarès historique des grands clubs de football français ?", "cat": "discovery"},
+            {"text": "Comment se positionne {brand} parmi les clubs de Ligue 1 cette saison 2025-2026 ?", "cat": "comparison"},
+            {"text": "Quels clubs de Ligue 1 se battent pour le maintien au cours de cette saison ?", "cat": "comparison"},
+            {"text": "Quels clubs de football français participent aux compétitions européennes cette saison ?", "cat": "comparison"},
+            {"text": "Quels clubs de Ligue 1 ont les meilleures académies de formation en France ?", "cat": "comparison"},
+            {"text": "Quel club de football français a la plus grande communauté de supporters en 2026 ?", "cat": "reputation"},
+            {"text": "Quels clubs de Ligue 1 sont connus pour leur formation de jeunes talents ?", "cat": "reputation"},
+            {"text": "Quel est le projet sportif de {brand} pour la saison 2025-2026 ?", "cat": "reputation"},
+            {"text": "Comment acheter des billets pour un match de {brand} au stade ?", "cat": "transactional"},
             {"text": "Quels clubs de Ligue 1 proposent les meilleures offres d'abonnement ?", "cat": "transactional"},
         ],
+        # ── LIGUE 2 — clubs en montée ──
+        "fr_ligue2": [
+            {"text": "Quels sont les grands clubs historiques qui jouent en Ligue 2 en 2026 ?", "cat": "discovery"},
+            {"text": "Quel grand club français est actuellement en Ligue 2 et vise la remontée ?", "cat": "discovery"},
+            {"text": "Quels clubs de Ligue 2 ont le plus grand palmarès en France ?", "cat": "discovery"},
+            {"text": "Quels clubs de Ligue 2 sont favoris pour la montée en Ligue 1 en 2026 ?", "cat": "comparison"},
+            {"text": "Comment se positionne {brand} dans la course à la promotion en Ligue 1 ?", "cat": "comparison"},
+            {"text": "Quels clubs de Ligue 2 ont les meilleures chances de remonter en Ligue 1 cette saison ?", "cat": "comparison"},
+            {"text": "Quel est le palmarès et l'histoire de {brand} dans le football français ?", "cat": "reputation"},
+            {"text": "Pourquoi {brand} est-il considéré comme un grand club malgré son passage en Ligue 2 ?", "cat": "reputation"},
+            {"text": "Quel est le projet sportif de {brand} pour retrouver l'élite du football français ?", "cat": "reputation"},
+            {"text": "Quels clubs français ont réussi à rebondir après une relégation en Ligue 2 ?", "cat": "reputation"},
+            {"text": "Comment suivre les matchs de Ligue 2 en direct en France ?", "cat": "transactional"},
+            {"text": "Comment acheter des billets pour voir {brand} jouer à domicile ?", "cat": "transactional"},
+        ],
         "en": [
-            {"text": "What are the best football clubs in France in 2025?", "cat": "discovery"},
+            {"text": "What are the most popular football clubs in France in 2026?", "cat": "discovery"},
             {"text": "Which French football club has the best reputation in Europe?", "cat": "discovery"},
-            {"text": "Which Ligue 1 club has the largest international fan base?", "cat": "comparison"},
+            {"text": "Which Ligue 1 club has the strongest fan base in France?", "cat": "comparison"},
             {"text": "How does {brand} compare to other top French football clubs?", "cat": "comparison"},
             {"text": "Which French football clubs are known for developing young talent?", "cat": "reputation"},
+            {"text": "What is the history and achievements of {brand} in French football?", "cat": "reputation"},
             {"text": "How to buy tickets for Ligue 1 football matches in France?", "cat": "transactional"},
         ],
     },
@@ -180,16 +198,26 @@ def list_configs() -> list:
 
 
 def build_prompt_library(cfg: dict) -> dict:
-    """Construit la prompt library à partir du template vertical + config."""
+    """Construit la prompt library à partir du template vertical + config.
+    
+    Tient compte du champ 'division' (ligue1/ligue2) pour le football.
+    """
     vertical  = cfg["vertical"]
     markets   = cfg["markets"]
     brand     = cfg["primary_brand"]
+    division  = cfg.get("division", "ligue1")
     templates = PROMPT_TEMPLATES.get(vertical, {})
 
     library = {}
     for market in markets:
         lang = market.split("-")[0] if "-" in market else market
-        prompts_raw = templates.get(market, templates.get(lang, templates.get("fr", [])))
+
+        # Pour le sport FR : choisir fr vs fr_ligue2 selon la division
+        if vertical == "sport" and lang == "fr" and division == "ligue2":
+            prompts_raw = templates.get("fr_ligue2", templates.get("fr", []))
+        else:
+            prompts_raw = templates.get(market, templates.get(lang, templates.get("fr", [])))
+
         library[market] = [
             {
                 "text":     p["text"].replace("{brand}", brand),
