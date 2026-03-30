@@ -717,6 +717,207 @@ def download_report(slug):
         return jsonify({"error": str(e)}), 500
 
 
+@server.route("/demo/<slug>")
+def demo_client(slug):
+    """Page pitch publique — sans login. URL à envoyer aux prospects."""
+    cfg = vdb.CLIENTS_CONFIG.get(slug)
+    if not cfg:
+        return jsonify({"error": f"Client inconnu : {slug}"}), 404
+
+    brand    = cfg["primary"]
+    vertical = cfg["vertical"]
+
+    # Data live depuis DB
+    score_g  = vdb.get_score(slug)
+    markets  = vdb.get_score_by_market(slug)
+    comps    = vdb.get_competitors(slug, top=8)
+    nss      = vdb.get_nss(slug)
+    history  = vdb.get_history(slug, n_weeks=8)
+
+    # Couleur score
+    def sc_hex(s):
+        if s is None: return T3
+        return NG if s >= 70 else (C1 if s >= 45 else RED)
+
+    # KPI hero
+    score_val  = score_g["score"] or 0
+    score_col  = sc_hex(score_val)
+    score_lbl  = "Excellent" if score_val >= 70 else ("Moyen" if score_val >= 45 else "Faible")
+    nss_col    = NG if nss >= 0 else RED
+
+    lang_flags = {"fr":"🇫🇷","en":"🇬🇧","pt":"🇵🇹","pl":"🇵🇱","fr-ci":"🇨🇮"}
+
+    # Marché cards
+    mkt_cards = "".join(f"""
+      <div style="background:{BG3};border:1px solid {BD};border-radius:10px;
+                  padding:14px 16px;text-align:center;flex:1;min-width:80px">
+        <div style="font-size:18px;margin-bottom:4px">{lang_flags.get(m['language'],'🌐')}</div>
+        <div style="font-size:24px;font-weight:800;color:{sc_hex(m['score'])}">{m['score']}</div>
+        <div style="font-size:10px;color:{T3};font-weight:700;letter-spacing:1px">/100</div>
+        <div style="font-size:10px;color:{T3};margin-top:2px">{m['language'].upper()}</div>
+      </div>
+    """ for m in markets)
+
+    # Concurrent bars (anonymisés sauf la marque primaire)
+    def comp_bar(name, score, is_primary):
+        col   = C1 if is_primary else T3
+        label = name if is_primary else f"Concurrent {name[0]}."
+        pct   = int(score)
+        return f"""
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:12px;font-weight:{'800' if is_primary else '500'};
+                       color:{col}">{label}</span>
+          <span style="font-size:12px;font-weight:700;color:{sc_hex(score)}">{score}/100</span>
+        </div>
+        <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:{pct}%;background:{'linear-gradient(90deg,'+C1+','+C2+')' if is_primary else 'rgba(90,122,138,0.4)'};
+                      border-radius:3px;transition:width 0.8s"></div>
+        </div>
+      </div>"""
+
+    comp_bars = "".join(comp_bar(c["name"], c["score"], c["is_primary"]) for c in comps)
+
+    # Évolution
+    hist_points = ""
+    if len(history) > 1:
+        max_s = max(h["score"] for h in history) or 100
+        w = 100 / max(len(history) - 1, 1)
+        pts = " ".join(f"{i*w:.1f},{100 - h['score']}" for i, h in enumerate(history))
+        hist_points = f"""
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none"
+             style="width:100%;height:80px;overflow:visible">
+          <defs>
+            <linearGradient id="hg" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="{C1}" stop-opacity="0.8"/>
+              <stop offset="100%" stop-color="{C2}" stop-opacity="0.8"/>
+            </linearGradient>
+            <linearGradient id="hgf" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="{C1}" stop-opacity="0.15"/>
+              <stop offset="100%" stop-color="{C1}" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <polyline points="{pts}" fill="none" stroke="url(#hg)"
+                    stroke-width="2" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:{T3}">
+          <span>{history[0]['date']}</span><span>{history[-1]['date']}</span>
+        </div>"""
+
+    body = f"""
+    <!-- HERO -->
+    <div style="text-align:center;padding:40px 24px 32px;
+                background:linear-gradient(180deg,rgba(0,229,255,0.04) 0%,transparent 100%);
+                border-bottom:1px solid {BD}">
+      <div style="font-size:10px;font-weight:700;letter-spacing:3px;
+                  color:{T3};margin-bottom:12px">GEO INTELLIGENCE · RAPPORT CLIENT</div>
+      <div style="font-size:36px;font-weight:800;color:{W};margin-bottom:4px">{brand}</div>
+      <div style="font-size:13px;color:{T3};margin-bottom:28px">
+        Visibilité IA mesurée sur {score_g['n_prompts']} prompts · {score_g['run_date']}
+      </div>
+
+      <!-- KPI principal -->
+      <div style="display:inline-flex;align-items:baseline;gap:6px;
+                  padding:20px 40px;background:{BG3};border:1px solid {BD};
+                  border-radius:16px;box-shadow:0 0 40px rgba(0,229,255,0.08)">
+        <span style="font-size:72px;font-weight:900;line-height:1;
+                     color:{score_col};font-family:Inter,sans-serif">{score_val}</span>
+        <div>
+          <div style="font-size:18px;color:{T3};font-weight:600">/100</div>
+          <div style="font-size:12px;font-weight:700;color:{score_col};
+                      margin-top:4px">{score_lbl}</div>
+        </div>
+        <div style="margin-left:24px;text-align:left;border-left:1px solid {BD};padding-left:24px">
+          <div style="font-size:22px;font-weight:800;color:{nss_col}">{nss:+d}%</div>
+          <div style="font-size:10px;color:{T3};font-weight:700;letter-spacing:1px">NET SENTIMENT</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MARCHÉS -->
+    <div style="padding:28px 24px">
+      <div style="font-size:10px;font-weight:700;letter-spacing:2px;
+                  color:{T3};margin-bottom:14px">SCORE PAR MARCHÉ</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">{mkt_cards}</div>
+    </div>
+
+    <!-- BENCHMARK + ÉVOLUTION -->
+    <div style="padding:0 24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+      <!-- Benchmark -->
+      <div style="background:{BG3};border:1px solid {BD};border-radius:12px;padding:20px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:2px;
+                    color:{T3};margin-bottom:16px">BENCHMARK CONCURRENTS</div>
+        {comp_bars}
+        <div style="font-size:10px;color:{T3};margin-top:8px;font-style:italic">
+          Les concurrents sont anonymisés dans cette vue publique.
+        </div>
+      </div>
+
+      <!-- Évolution -->
+      <div style="background:{BG3};border:1px solid {BD};border-radius:12px;padding:20px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:2px;
+                    color:{T3};margin-bottom:16px">ÉVOLUTION GEO SCORE</div>
+        {"" if not hist_points else hist_points}
+        {"<div style='color:"+T3+";font-size:12px'>Historique insuffisant — premier run récent.</div>" if not hist_points else ""}
+      </div>
+    </div>
+
+    <!-- MOAT + CTA -->
+    <div style="margin:0 24px 32px;background:{N};border:1px solid rgba(0,229,255,0.15);
+                border-radius:12px;padding:28px;text-align:center;
+                box-shadow:0 0 40px rgba(0,229,255,0.06)">
+      <div style="font-size:18px;font-weight:800;color:{W};margin-bottom:8px">
+        Voir le dashboard complet ?
+      </div>
+      <div style="font-size:13px;color:{T3};margin-bottom:6px">
+        4 LLMs · {len(markets)} marchés · alertes automatiques · recommandations actionnables
+      </div>
+      <div style="display:flex;gap:16px;justify-content:center;
+                  font-size:11px;color:{T3};margin-bottom:20px">
+        <span>✓ Prompt library verticale {vertical}</span>
+        <span>✓ Données propriétaires</span>
+        <span>✓ Historique indépendant de votre agence</span>
+      </div>
+      <a href="/contact-form" style="display:inline-block;padding:12px 28px;
+         background:linear-gradient(135deg,{C1},{C2});color:{BG};
+         font-weight:800;font-size:14px;border-radius:8px;text-decoration:none">
+        Demander un accès complet →
+      </a>
+      <div style="font-size:11px;color:{T3};margin-top:10px">
+        Réponse sous 24h · Sans engagement
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div style="padding:16px 24px;border-top:1px solid {BD};
+                display:flex;justify-content:space-between;font-size:11px;color:{T3}">
+      <span>Voxa GEO Intelligence · <a href="mailto:luc@sharper-media.com"
+            style="color:{C1}">luc@sharper-media.com</a></span>
+      <span>Données au {score_g['run_date']} · Confidentiel</span>
+    </div>"""
+
+    return pg_wide(f"Voxa · {brand} · GEO Score", body)
+
+
+@server.route("/optimize/<slug>")
+def download_optimize(slug):
+    """Génère et télécharge le package JSON-LD/FAQ — sans login."""
+    from geo_optimizer import save_and_export
+    if slug not in vdb.CLIENTS_CONFIG:
+        return jsonify({"error": f"Client inconnu : {slug}"}), 404
+    try:
+        threshold = request.args.get("threshold", 60, type=int)
+        path = save_and_export(slug, threshold)
+        if not path or not os.path.exists(path):
+            return jsonify({"error": "Erreur génération"}), 500
+        return send_file(path, as_attachment=True,
+                        download_name=os.path.basename(path),
+                        mimetype="application/json")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @server.route("/health")
 def health():
     return jsonify({
@@ -780,12 +981,44 @@ def settings():
           <div>
             <div style="font-size:11px;color:{T3};margin-bottom:3px">Accès dashboards</div>
             <div style="display:flex;gap:8px">
-              <a href="/psg/" style="font-size:12px;font-weight:600;color:{N};
-                   background:{BD};padding:4px 10px;border-radius:6px">PSG →</a>
-              <a href="/betclic/" style="font-size:12px;font-weight:600;color:{N};
-                   background:{BD};padding:4px 10px;border-radius:6px">Betclic →</a>
+              <a href="/psg/" style="font-size:12px;font-weight:600;color:{W};
+                   background:{BG3};border:1px solid {BD};padding:4px 10px;border-radius:6px">PSG →</a>
+              <a href="/betclic/" style="font-size:12px;font-weight:600;color:{W};
+                   background:{BG3};border:1px solid {BD};padding:4px 10px;border-radius:6px">Betclic →</a>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rapports & Optimisation -->
+    <div class="card" style="margin-bottom:18px">
+      <div style="padding:20px 24px">
+        <div class="lbl" style="margin-bottom:16px">RAPPORTS & OPTIMISATION GEO</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          {"".join(f'''
+          <div style="background:{BG};border:1px solid {BD};border-radius:10px;padding:16px">
+            <div style="font-weight:700;font-size:14px;color:{W};margin-bottom:4px">{cfg["name"]}</div>
+            <div style="font-size:11px;color:{T3};margin-bottom:12px">{cfg["vertical"].title()} · {", ".join(cfg["markets"][:2]).upper()}</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <a href="/report/{slug}" style="display:block;text-align:center;padding:7px 12px;
+                   background:{BG3};border:1px solid {BD};border-radius:8px;
+                   font-size:12px;font-weight:600;color:{T2};text-decoration:none">
+                📋 Rapport PDF
+              </a>
+              <a href="/optimize/{slug}" style="display:block;text-align:center;padding:7px 12px;
+                   background:linear-gradient(135deg,{C1}15,{C2}15);
+                   border:1px solid {C1}40;border-radius:8px;
+                   font-size:12px;font-weight:600;color:{C1};text-decoration:none">
+                ⚡ Package JSON-LD/FAQ
+              </a>
+            </div>
+          </div>
+          ''' for slug, cfg in vdb.CLIENTS_CONFIG.items())}
+        </div>
+        <div style="font-size:11px;color:{T3};margin-top:12px">
+          Le package JSON-LD/FAQ contient les schémas Schema.org prêts à coller sur votre site + suggestions d'articles.
+          Relancez un tracker 4 semaines après pour mesurer l'impact.
         </div>
       </div>
     </div>

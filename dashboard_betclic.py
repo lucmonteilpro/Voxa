@@ -479,9 +479,9 @@ def build_radar_chart() -> go.Figure:
 
 def card(children, style_extra=None):
     style = {
-        "background": T.W, "border": "1px solid #e5e7eb",
+        "background": T.BG3, "border": f"1px solid {T.BD}",
         "borderRadius": 12, "padding": 24,
-        "boxShadow": "0 1px 3px rgba(0,0,0,0.06)",
+        "boxShadow": "0 4px 24px rgba(0,229,255,0.06)",
     }
     if style_extra:
         style.update(style_extra)
@@ -595,7 +595,7 @@ def hero_section(market: str, category: str = "all", llm: str = "all") -> html.D
         ], style={"flex": 1}),
     ], style={
         "display": "flex", "alignItems": "center", "gap": 48,
-        "background": T.W, "border": "1px solid #e5e7eb",
+        "background": T.BG3, "border": f"1px solid {T.BD}",
         "borderRadius": 12, "padding": "28px 32px",
         "marginBottom": 20, "boxShadow": "0 1px 3px rgba(0,0,0,0.07)",
     })
@@ -661,8 +661,8 @@ def prompt_cards(df: pd.DataFrame) -> list:
             ], style={"textAlign": "right", "flexShrink": 0, "paddingLeft": 16}),
         ], style={
             "display": "flex", "alignItems": "flex-start", "gap": 16,
-            "border": "1px solid #e5e7eb", "borderRadius": 12,
-            "padding": "16px 20px", "marginBottom": 10, "background": T.W,
+            "border": f"1px solid {T.BD}", "borderRadius": 12,
+            "padding": "16px 20px", "marginBottom": 10, "background": T.BG3,
             "boxShadow": "0 1px 2px rgba(0,0,0,0.04)",
         }))
     return cards
@@ -740,10 +740,10 @@ CONTROLS = html.Div([
         ),
     ]),
 ], style={
-    "background": T.W, "border": "1px solid #e5e7eb",
+    "background": T.BG3, "border": f"1px solid {T.BD}",
     "borderRadius": 12, "padding": "16px 24px",
     "marginBottom": 20, "display": "flex", "gap": 40, "alignItems": "flex-start",
-    "boxShadow": "0 1px 3px rgba(0,0,0,0.04)",
+    "boxShadow": "0 4px 24px rgba(0,229,255,0.06)",
 })
 
 app.layout = html.Div([
@@ -885,7 +885,7 @@ def render_tab(active_tab, market, cat, llm):
                                            "color": "#00E5FF"}),
                                 html.Div("/100", style={"fontSize": 10, "color": T.T3}),
                             ], style={
-                                "border": "1px solid #e5e7eb", "borderRadius": 10,
+                                "border": f"1px solid {T.BD}", "borderRadius": 10,
                                 "padding": "14px 16px", "textAlign": "center",
                                 "flex": 1,
                             })
@@ -910,7 +910,7 @@ def render_tab(active_tab, market, cat, llm):
                                        "color": "#00FFAA" if row["net_sentiment"] >= 0
                                                else "#FF4B6E"}),
                         ], style={
-                            "border": "1px solid #e5e7eb", "borderRadius": 10,
+                            "border": f"1px solid {T.BD}", "borderRadius": 10,
                             "padding": "12px 14px", "textAlign": "center", "flex": 1,
                         })
                         for _, row in scores_df.iterrows()
@@ -923,190 +923,249 @@ def render_tab(active_tab, market, cat, llm):
         ])
 
     elif active_tab == "insights":
-        recos = generate_recommendations(market)
-        gap_df = load_gap_analysis(market)
+        recos    = generate_recommendations(market)
+        gap_df   = load_gap_analysis(market)
 
-        # Construire les cartes de recommandation
-        priority_styles = {
-            "haute":   {"border": "#FF4B6E", "bg": "rgba(255,75,110,0.08)", "badge_bg": "rgba(255,75,110,0.10)", "badge_color": "#FF4B6E"},
-            "moyenne": {"border": "#F59E0B", "bg": "rgba(245,158,11,0.08)", "badge_bg": "rgba(245,158,11,0.15)", "badge_color": "#F59E0B"},
-            "info":    {"border": "#00FFAA", "bg": "rgba(0,255,170,0.06)", "badge_bg": "rgba(0,255,170,0.10)", "badge_color": "#00FFAA"},
+        # ── Styles priorité ─────────────────────────────────
+        P_STYLES = {
+            "haute":   {"border": T.RED,  "bg": f"rgba(255,75,110,0.06)",
+                        "badge_bg": f"rgba(255,75,110,0.12)", "badge_col": T.RED},
+            "moyenne": {"border": T.C1,   "bg": f"rgba(0,229,255,0.04)",
+                        "badge_bg": f"rgba(0,229,255,0.10)",  "badge_col": T.C1},
+            "info":    {"border": T.NG,   "bg": f"rgba(0,255,170,0.04)",
+                        "badge_bg": f"rgba(0,255,170,0.10)",  "badge_col": T.NG},
         }
-        reco_cards = []
-        for reco in recos:
-            ps = priority_styles.get(reco["priority"], priority_styles["info"])
-            reco_cards.append(html.Div([
+
+        def reco_card_dark(icon, priority, title, body_text, impact=None, prompt_text=None):
+            ps = P_STYLES.get(priority, P_STYLES["info"])
+            return html.Div([
                 html.Div([
-                    html.Span(reco["icon"], style={"fontSize": 18, "marginRight": 10}),
-                    html.Span(reco["priority"].upper(), style={
+                    html.Span(icon, style={"fontSize": 15, "marginRight": 8}),
+                    html.Span(priority.upper(), style={
                         "fontSize": 9, "fontWeight": 800, "letterSpacing": "1.5px",
                         "padding": "2px 8px", "borderRadius": 20,
-                        "background": ps["badge_bg"], "color": ps["badge_color"],
-                        "marginRight": 10}),
-                    html.Span(reco["title"], style={
-                        "fontSize": 14, "fontWeight": 700, "color": T.W}),
-                ], style={"marginBottom": 8}),
-                html.Div(reco["body"], style={
-                    "fontSize": 13, "color": "#A8B8C8", "lineHeight": "1.7",
-                    "paddingLeft": 28}),
+                        "background": ps["badge_bg"], "color": ps["badge_col"],
+                        "marginRight": 10, "fontFamily": T.FONT_BODY,
+                    }),
+                    html.Span(title, style={
+                        "fontSize": 13, "fontWeight": 700, "color": T.W,
+                        "fontFamily": T.FONT_BODY,
+                    }),
+                    *([ html.Span(f"+{impact:.0f} pts estimés", style={
+                        "fontSize": 10, "color": T.T3, "marginLeft": 10,
+                    })] if impact else []),
+                ], style={"marginBottom": 6}),
+                html.Div(body_text, style={
+                    "fontSize": 12, "color": T.T2, "lineHeight": "1.7",
+                    "paddingLeft": 22, "fontFamily": T.FONT_BODY,
+                }),
+                *([ html.Div(f"Prompt cible : « {prompt_text[:80]}… »", style={
+                    "fontSize": 10, "color": T.T3, "paddingLeft": 22,
+                    "marginTop": 4, "fontStyle": "italic",
+                })] if prompt_text else []),
             ], style={
                 "borderLeft": f"3px solid {ps['border']}",
-                "background": ps["bg"],
+                "background":  ps["bg"],
                 "borderRadius": "0 10px 10px 0",
-                "padding": "16px 20px", "marginBottom": 12,
-            }))
+                "padding": "12px 18px", "marginBottom": 10,
+            })
 
-        # Construire le gap analysis table
-        gap_section = html.Div("Pas de données pour le gap analysis.",
-                               style={"color": T.T3, "fontSize": 13})
+        # ── Recos live ───────────────────────────────────────
+        reco_cards = []
+        for r in recos:
+            reco_cards.append(reco_card_dark(
+                r.get("icon", "💡"), r["priority"],
+                r["title"], r["body"]
+            ))
+
+        # ── Gap analysis ─────────────────────────────────────
+        gap_section = html.Div(
+            "Données insuffisantes pour le gap analysis sur ce marché.",
+            style={"color": T.T3, "fontSize": 12, "padding": "12px 0"}
+        )
         if not gap_df.empty:
-            # En-tête
             cat_cols = [c for c in gap_df.columns if c in CATEGORY_LABELS]
-            header = [html.Th("", style={"width": 140})] + [
+            betclic_scores = {}
+            if PRIMARY_BRAND in gap_df.index:
+                betclic_scores = {c: gap_df.loc[PRIMARY_BRAND, c] for c in cat_cols if c in gap_df.columns}
+
+            header_cells = [html.Th("", style={"width": 130, "padding": "8px 12px"})] + [
                 html.Th(CATEGORY_LABELS.get(c, c), style={
                     "fontSize": 10, "fontWeight": 700, "textTransform": "uppercase",
                     "letterSpacing": "1px", "color": T.T3, "textAlign": "center",
-                    "padding": "8px 12px"})
-                for c in cat_cols
+                    "padding": "8px 12px", "background": T.BG,
+                }) for c in cat_cols
             ]
-            # Score Betclic pour calcul des écarts
-            betclic_scores = {}
-            if PRIMARY_BRAND in gap_df.index:
-                for c in cat_cols:
-                    betclic_scores[c] = gap_df.loc[PRIMARY_BRAND, c] if c in gap_df.columns else 0
-            # Lignes
             rows = []
             for brand in gap_df.index:
                 is_primary = brand == PRIMARY_BRAND
                 cells = [html.Td(brand, style={
                     "fontWeight": 800 if is_primary else 600,
                     "fontSize": 13,
-                    "color": BRAND_COLORS.get(brand, T.W) if is_primary else T.W,
-                    "padding": "10px 12px"})]
+                    "color": BRAND_COLORS.get(brand, T.C1) if is_primary else T.W,
+                    "padding": "10px 12px",
+                    "background": f"rgba(0,229,255,0.04)" if is_primary else T.BG3,
+                })]
                 for c in cat_cols:
                     val = int(gap_df.loc[brand, c]) if c in gap_df.columns else 0
                     if is_primary:
-                        bg = "rgba(0,229,255,0.10)"
-                        color = "#00E5FF"
+                        bg_c = "rgba(0,229,255,0.08)"; col = T.C1
                     else:
                         delta = val - betclic_scores.get(c, 0)
                         if delta > 10:
-                            bg = "rgba(255,75,110,0.10)"
-                            color = "#FF4B6E"
+                            bg_c = "rgba(255,75,110,0.08)"; col = T.RED
                         elif delta < -10:
-                            bg = "rgba(0,255,170,0.10)"
-                            color = "#00FFAA"
+                            bg_c = "rgba(0,255,170,0.08)"; col = T.NG
                         else:
-                            bg = T.BG
-                            color = T.T2
+                            bg_c = T.BG3; col = T.T2
                     cells.append(html.Td(str(val), style={
                         "textAlign": "center", "fontSize": 14,
                         "fontWeight": 800 if is_primary else 600,
-                        "color": color, "background": bg,
-                        "padding": "10px 12px", "borderRadius": 6}))
-                rows.append(html.Tr(cells))
+                        "color": col, "background": bg_c,
+                        "padding": "10px 12px",
+                        "borderRadius": 6,
+                    }))
+                rows.append(html.Tr(cells, style={"borderBottom": f"1px solid {T.BD}"}))
 
             gap_section = dbc.Table([
-                html.Thead(html.Tr(header)),
+                html.Thead(html.Tr(header_cells), style={"borderBottom": f"2px solid {T.BD}"}),
                 html.Tbody(rows),
-            ], bordered=False, hover=True, style={"fontFamily": T.FONT_BODY})
+            ], bordered=False, hover=False, style={"fontFamily": T.FONT_BODY})
 
-        # ── Recommandations persistantes depuis voxa_db ──────
+        # ── Alertes DB ───────────────────────────────────────
         try:
             import voxa_db as vdb
-            db_recos = vdb.get_recommendations("betclic")
+            db_recos  = vdb.get_recommendations("betclic")
             db_alerts = vdb.get_alerts("betclic", unread_only=True)
         except Exception:
             db_recos = []; db_alerts = []
 
-        # Alertes actives
-        alert_section = html.Div()
-        if db_alerts:
-            alert_items = [html.Div([
-                html.Span({"critical":"🔴","warning":"🟡","info":"🟢"}.get(a.get("severity","info"),"🟢"),
-                          style={"marginRight": 6}),
-                html.Strong(a["title"]), f" — {a['body']}",
-                html.Span(f"  {a['created_at'][:10]}", style={"fontSize":10,"color":T.T3,"marginLeft":8}),
-            ], style={"fontSize":12,"padding":"8px 12px","marginBottom":6,
-                      "background":"rgba(245,158,11,0.08)","borderRadius":8,"borderLeft":"3px solid #d97706"})
-            for a in db_alerts]
-            alert_section = card([
-                card_title("ALERTES ACTIVES"),
-                html.Div(alert_items),
-            ])
-
-        # Recos persistantes
-        db_reco_cards = []
-        for r in db_recos:
-            pr_map = {"high":"haute","medium":"moyenne","low":"info"}
-            prio = pr_map.get(r.get("priority","medium"), "moyenne")
-            ps = priority_styles.get(prio, priority_styles["moyenne"])
-            impact = r.get("impact_score", 0)
-            db_reco_cards.append(html.Div([
+        SEV_STYLES = {
+            "critical": {"icon": "⚠", "border": T.RED, "bg": f"rgba(255,75,110,0.06)"},
+            "warning":  {"icon": "◎", "border": T.C1,  "bg": f"rgba(0,229,255,0.04)"},
+            "info":     {"icon": "✓", "border": T.NG,  "bg": f"rgba(0,255,170,0.04)"},
+        }
+        alert_items = []
+        for a in db_alerts:
+            ss = SEV_STYLES.get(a.get("severity", "info"), SEV_STYLES["info"])
+            alert_items.append(html.Div([
                 html.Div([
-                    html.Span("💡", style={"fontSize": 16, "marginRight": 8}),
-                    html.Span(prio.upper(), style={
-                        "fontSize": 9, "fontWeight": 800, "letterSpacing": "1.5px",
-                        "padding": "2px 8px", "borderRadius": 20,
-                        "background": ps["badge_bg"], "color": ps["badge_color"],
-                        "marginRight": 8}),
-                    html.Span(r.get("title",""), style={
-                        "fontSize": 13, "fontWeight": 700, "color": T.W}),
-                    *([ html.Span(f"+{impact:.0f} pts estimés",
-                        style={"fontSize":10,"color":T.T3,"marginLeft":8})] if impact else []),
-                ], style={"marginBottom": 6}),
-                html.Div(r.get("body",""), style={
-                    "fontSize": 12, "color": "#A8B8C8", "lineHeight": "1.7",
-                    "paddingLeft": 24}),
-                *([ html.Div(f"Prompt : « {r['prompt_text'][:80]}… »",
-                    style={"fontSize":10,"color":T.T3,"marginTop":4,
-                           "paddingLeft":24,"fontStyle":"italic"})
-                   ] if r.get("prompt_text") else []),
+                    html.Span(ss["icon"], style={
+                        "marginRight": 8, "fontSize": 12,
+                        "color": ss["border"], "fontWeight": 800,
+                    }),
+                    html.Span(a["title"], style={
+                        "fontWeight": 700, "color": T.W, "fontSize": 13,
+                        "fontFamily": T.FONT_BODY,
+                    }),
+                    html.Span(f"  {a['created_at'][:10]}", style={
+                        "fontSize": 10, "color": T.T3, "marginLeft": 10,
+                    }),
+                ], style={"marginBottom": 3}),
+                html.Div(a["body"], style={
+                    "fontSize": 12, "color": T.T2,
+                    "paddingLeft": 20, "lineHeight": 1.5,
+                    "fontFamily": T.FONT_BODY,
+                }),
             ], style={
-                "borderLeft": f"3px solid {ps['border']}",
-                "background": ps["bg"],
-                "borderRadius": "0 10px 10px 0",
-                "padding": "14px 18px", "marginBottom": 10,
+                "padding": "10px 14px", "marginBottom": 8,
+                "background": ss["bg"], "borderRadius": 8,
+                "borderLeft": f"3px solid {ss['border']}",
             }))
 
-        db_section = html.Div()
-        if db_reco_cards:
-            db_section = dbc.Row([
-                dbc.Col(card([
-                    card_title("RECOMMANDATIONS GEO — ACTIONS PRIORITAIRES"),
-                    html.Div(db_reco_cards),
-                    html.Div("Générées automatiquement après chaque run tracker.",
-                        style={"fontSize":11,"color":T.T3,"marginTop":12,"fontStyle":"italic"}),
-                ]), width=12),
-            ], className="mb-4")
+        alert_block = html.Div()
+        if alert_items:
+            alert_block = html.Div([
+                html.Div("ALERTES ACTIVES", style={
+                    "fontSize": 10, "fontWeight": 700, "letterSpacing": "2px",
+                    "color": T.T3, "marginBottom": 12, "fontFamily": T.FONT_BODY,
+                }),
+                html.Div(alert_items),
+            ], style={
+                "background": T.BG3, "border": f"1px solid {T.BD}",
+                "borderRadius": 12, "padding": "20px 24px", "marginBottom": 16,
+            })
 
+        # ── Recos DB ─────────────────────────────────────────
+        db_cards = []
+        for r in db_recos:
+            pr_map = {"high": "haute", "medium": "moyenne", "low": "info"}
+            prio = pr_map.get(r.get("priority", "medium"), "moyenne")
+            db_cards.append(reco_card_dark(
+                "💡", prio, r.get("title", ""), r.get("body", ""),
+                impact=r.get("impact_score"), prompt_text=r.get("prompt_text"),
+            ))
+
+        db_block = html.Div()
+        if db_cards:
+            db_block = html.Div([
+                html.Div("RECOMMANDATIONS GEO — ACTIONS PRIORITAIRES", style={
+                    "fontSize": 10, "fontWeight": 700, "letterSpacing": "2px",
+                    "color": T.T3, "marginBottom": 12, "fontFamily": T.FONT_BODY,
+                }),
+                html.Div(db_cards),
+                html.Div(
+                    "Générées automatiquement après chaque run tracker.",
+                    style={"fontSize": 11, "color": T.T3, "marginTop": 8,
+                           "fontStyle": "italic", "fontFamily": T.FONT_BODY},
+                ),
+            ], style={
+                "background": T.BG3, "border": f"1px solid {T.BD}",
+                "borderRadius": 12, "padding": "20px 24px", "marginBottom": 16,
+            })
+
+        # ── LAYOUT ───────────────────────────────────────────
         return html.Div([
-            alert_section,
-            dbc.Row([
-                dbc.Col(card([
-                    card_title(f"Recommandations · {MARKETS.get(market, market)}"),
-                    html.Div(reco_cards),
-                ]), width=12),
-            ], className="mb-4"),
-            db_section,
-            dbc.Row([
-                dbc.Col(card([
-                    card_title(f"Gap Analysis · Betclic vs concurrents · {MARKETS.get(market, market)}"),
+            alert_block,
+
+            # Recos live
+            html.Div([
+                html.Div(f"RECOMMANDATIONS · {MARKETS.get(market, market).upper()}", style={
+                    "fontSize": 10, "fontWeight": 700, "letterSpacing": "2px",
+                    "color": T.T3, "marginBottom": 12, "fontFamily": T.FONT_BODY,
+                }),
+                html.Div(reco_cards) if reco_cards else html.Div(
+                    "Aucune recommandation critique pour ce marché.",
+                    style={"color": T.T3, "fontSize": 12}
+                ),
+            ], style={
+                "background": T.BG3, "border": f"1px solid {T.BD}",
+                "borderRadius": 12, "padding": "20px 24px", "marginBottom": 16,
+            }),
+
+            db_block,
+
+            # Gap analysis
+            html.Div([
+                html.Div([
+                    html.Div(f"GAP ANALYSIS · BETCLIC VS CONCURRENTS · {MARKETS.get(market, market).upper()}", style={
+                        "fontSize": 10, "fontWeight": 700, "letterSpacing": "2px",
+                        "color": T.T3, "marginBottom": 12, "fontFamily": T.FONT_BODY,
+                    }),
                     html.Div([
-                        html.Div([
-                            html.Span("", style={
-                                "display": "inline-block", "width": 10, "height": 10,
-                                "borderRadius": 3, "background": "rgba(0,255,170,0.10)", "marginRight": 4}),
-                            html.Span("Betclic devant", style={"fontSize": 10, "color": "#00FFAA", "marginRight": 16}),
-                            html.Span("", style={
-                                "display": "inline-block", "width": 10, "height": 10,
-                                "borderRadius": 3, "background": "rgba(255,75,110,0.10)", "marginRight": 4}),
-                            html.Span("Concurrent devant", style={"fontSize": 10, "color": "#FF4B6E"}),
-                        ], style={"marginBottom": 12}),
-                        gap_section,
-                    ]),
-                ]), width=12),
-            ]),
+                        html.Span("", style={
+                            "display": "inline-block", "width": 8, "height": 8,
+                            "borderRadius": 3, "background": "rgba(0,255,170,0.4)",
+                            "marginRight": 4,
+                        }),
+                        html.Span("Betclic devant", style={
+                            "fontSize": 10, "color": T.NG, "marginRight": 16,
+                        }),
+                        html.Span("", style={
+                            "display": "inline-block", "width": 8, "height": 8,
+                            "borderRadius": 3, "background": "rgba(255,75,110,0.4)",
+                            "marginRight": 4,
+                        }),
+                        html.Span("Concurrent devant", style={
+                            "fontSize": 10, "color": T.RED,
+                        }),
+                    ], style={"marginBottom": 12}),
+                    gap_section,
+                ]),
+            ], style={
+                "background": T.BG3, "border": f"1px solid {T.BD}",
+                "borderRadius": 12, "padding": "20px 24px",
+            }),
         ])
 
     elif active_tab == "overview":
@@ -1129,7 +1188,7 @@ def render_tab(active_tab, market, cat, llm):
                                      style={"fontSize": 11, "color": T.T3,
                                             "marginTop": 6}),
                         ], style={
-                            "border": "1px solid #e5e7eb", "borderRadius": 12,
+                            "border": f"1px solid {T.BD}", "borderRadius": 12,
                             "padding": "20px", "textAlign": "center", "flex": 1,
                         })
                         for _, row in overview_df.iterrows()
