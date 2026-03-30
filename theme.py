@@ -519,7 +519,7 @@ def badge_style(color: str = C1, bg_opacity: float = 0.12) -> dict:
 # ─────────────────────────────────────────────────────────────
 
 def make_topbar(client_name: str, vertical: str = "sport",
-                right_children=None) -> "html.Div":
+                right_children=None):
     """
     Topbar standardisée Voxa — à utiliser dans tous les dashboards.
     Paramètres :
@@ -527,6 +527,7 @@ def make_topbar(client_name: str, vertical: str = "sport",
       vertical      : "sport" | "bet" | "politics"
       right_children: liste de composants Dash additionnels (boutons, etc.)
     """
+    from dash import html
     from dash import html
 
     vert_colors = {
@@ -585,7 +586,7 @@ def make_topbar(client_name: str, vertical: str = "sport",
     })
 
 
-def make_btn_dark(label: str, **kwargs) -> "html.Button":
+def make_btn_dark(label: str, **kwargs):
     """Bouton style Voxa dark."""
     from dash import html
     style = {
@@ -598,7 +599,7 @@ def make_btn_dark(label: str, **kwargs) -> "html.Button":
     return html.Button(label, style=style, **{k:v for k,v in kwargs.items() if k != "style"})
 
 
-def make_btn_primary(label: str, **kwargs) -> "html.Button":
+def make_btn_primary(label: str, **kwargs):
     """Bouton CTA gradient Voxa."""
     from dash import html
     style = {
