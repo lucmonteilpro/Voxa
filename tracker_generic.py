@@ -103,10 +103,52 @@ PROMPT_TEMPLATES = {
     },
     "politics": {
         "fr": [
-            {"text": "Quelles sont les personnalités politiques françaises les plus influentes en 2025 ?", "cat": "discovery"},
-            {"text": "Quels partis politiques français sont les plus présents dans l'actualité ?", "cat": "discovery"},
-            {"text": "Comment est perçu {brand} dans le paysage politique français ?", "cat": "reputation"},
-            {"text": "Quelles sont les propositions phares des partis politiques français ?", "cat": "comparison"},
+            # ── NOTORIÉTÉ & POSITIONNEMENT ────────────────────
+            # Source : Ifop-Fiducial / Ipsos bva-CESI, mars 2026
+            # Édouard Philippe : 16-27% intentions de vote 1er tour
+            # Meilleur candidat du bloc central pour 2027
+            {"text": "Qui sont les principaux candidats à l'élection présidentielle française de 2027 ?", "cat": "discovery"},
+            {"text": "Quels sont les candidats les mieux placés pour le second tour de la présidentielle 2027 ?", "cat": "discovery"},
+            {"text": "Qui pourrait battre le Rassemblement National à la présidentielle 2027 ?", "cat": "discovery"},
+            {"text": "Quel candidat du bloc central est le mieux positionné pour 2027 en France ?", "cat": "discovery"},
+            {"text": "Quels sont les sondages présidentiels 2027 et qui arrive en tête ?", "cat": "discovery"},
+
+            # ── POUVOIR D'ACHAT — préoccupation n°1 IPSOS (42-49%) ──
+            # Baromètre Ipsos bva-CESI, fév-mars 2026
+            {"text": "Quel candidat à la présidentielle 2027 a le meilleur programme sur le pouvoir d'achat ?", "cat": "reputation"},
+            {"text": "Quelles sont les propositions des candidats 2027 pour lutter contre la hausse des prix ?", "cat": "comparison"},
+            {"text": "Qui propose les meilleures solutions pour les difficultés économiques des Français en 2027 ?", "cat": "comparison"},
+            {"text": "Comment les candidats à la présidentielle 2027 comptent-ils revaloriser les salaires ?", "cat": "comparison"},
+
+            # ── SÉCURITÉ & DÉLINQUANCE — préoccupation n°3 IPSOS (32-33%) ──
+            {"text": "Quel candidat présidentiel 2027 a le programme le plus crédible sur la sécurité ?", "cat": "reputation"},
+            {"text": "Comment les candidats 2027 comptent-ils réduire la délinquance en France ?", "cat": "comparison"},
+            {"text": "Qui propose les mesures les plus efficaces contre l'insécurité pour 2027 ?", "cat": "comparison"},
+
+            # ── SYSTÈME SOCIAL — préoccupation n°2 IPSOS (38-41%) ──
+            {"text": "Quel candidat présidentiel 2027 défend le mieux le système de santé et les retraites ?", "cat": "reputation"},
+            {"text": "Quelles sont les propositions des candidats 2027 pour sauver le système de retraite ?", "cat": "comparison"},
+            {"text": "Comment les candidats à la présidentielle 2027 veulent-ils réformer la santé publique ?", "cat": "comparison"},
+
+            # ── DETTE PUBLIQUE — préoccupation n°4 IPSOS (26-31%) ──
+            {"text": "Quel candidat présidentiel 2027 propose le meilleur plan pour réduire la dette française ?", "cat": "reputation"},
+            {"text": "Comment les candidats à la présidentielle 2027 gèrent-ils la question budgétaire ?", "cat": "comparison"},
+
+            # ── IMMIGRATION — préoccupation n°5 IPSOS (28-29%) ──
+            {"text": "Quelle est la position des candidats présidentiels 2027 sur l'immigration ?", "cat": "comparison"},
+            {"text": "Quel candidat 2027 propose une politique migratoire crédible pour la France ?", "cat": "comparison"},
+
+            # ── CRISES INTERNATIONALES — IPSOS mars 2026 (+5pts) ──
+            {"text": "Quel candidat présidentiel 2027 est le plus crédible sur la défense et les affaires étrangères ?", "cat": "reputation"},
+            {"text": "Comment les candidats 2027 réagissent-ils aux crises internationales comme le conflit en Iran ?", "cat": "comparison"},
+            {"text": "Quel candidat à la présidentielle 2027 défend le mieux la souveraineté française ?", "cat": "reputation"},
+
+            # ── PROFIL & LÉGITIMITÉ ──
+            {"text": "Qu'est-ce qui différencie {brand} des autres candidats à la présidentielle 2027 ?", "cat": "comparison"},
+            {"text": "Quel est le bilan politique de {brand} en tant qu'ancien Premier ministre ?", "cat": "reputation"},
+            {"text": "Pourquoi {brand} est-il considéré comme un candidat sérieux pour 2027 ?", "cat": "reputation"},
+            {"text": "Quelles sont les chances de {brand} d'accéder au second tour de la présidentielle 2027 ?", "cat": "discovery"},
+            {"text": "Que pensent les Français de {brand} comme potentiel président de la République ?", "cat": "reputation"},
         ],
     },
 }
