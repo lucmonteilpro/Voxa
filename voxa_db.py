@@ -35,7 +35,7 @@ CLIENTS_CONFIG = {
         "name":         "PSG",
         "full":         "Paris Saint-Germain",
         "vertical":     "sport",
-        "primary":      "OM",        # marque primaire telle qu'en DB
+        "primary":      "PSG",       # marque primaire telle qu'en DB
         "markets":      ["fr", "en"],
         "dashboard_url": "/psg/",
     },
@@ -150,11 +150,24 @@ CREATE INDEX IF NOT EXISTS idx_recos_slug   ON recommendations(client_slug, is_d
 """
 
 
+_accounts_initialized = False
+
 def init_accounts_db():
+    """Crée les tables accounts/alerts/recommendations si absentes.
+    Appelé une seule fois au démarrage (ou manuellement via CLI).
+    """
+    global _accounts_initialized
+    if _accounts_initialized:
+        return
     c = conn_accounts()
     c.executescript(ACCOUNTS_SCHEMA)
     c.commit()
-    return c
+    c.close()
+    _accounts_initialized = True
+
+
+# Initialisation au chargement du module
+init_accounts_db()
 
 
 # ─────────────────────────────────────────────
@@ -172,43 +185,51 @@ def check_password(password: str, hashed: str) -> bool:
 
 
 def create_account(email: str, password: str, name: str, plan: str = "trial") -> int:
-    c = init_accounts_db()
-    api_key = "vxa_" + secrets.token_urlsafe(32)
-    c.execute(
-        "INSERT INTO accounts (email, password_hash, name, plan, api_key) VALUES (?,?,?,?,?)",
-        (email, hash_password(password), name, plan, api_key)
-    )
-    c.commit()
-    row = c.execute("SELECT id FROM accounts WHERE email=?", (email,)).fetchone()
-    c.close()
-    return row["id"]
+    c = conn_accounts()
+    try:
+        api_key = "vxa_" + secrets.token_urlsafe(32)
+        c.execute(
+            "INSERT INTO accounts (email, password_hash, name, plan, api_key) VALUES (?,?,?,?,?)",
+            (email, hash_password(password), name, plan, api_key)
+        )
+        c.commit()
+        row = c.execute("SELECT id FROM accounts WHERE email=?", (email,)).fetchone()
+        return row["id"]
+    finally:
+        c.close()
 
 
 def get_account_by_email(email: str):
-    c = init_accounts_db()
-    row = c.execute(
-        "SELECT * FROM accounts WHERE email=? AND is_active=1", (email,)
-    ).fetchone()
-    c.close()
-    return dict(row) if row else None
+    c = conn_accounts()
+    try:
+        row = c.execute(
+            "SELECT * FROM accounts WHERE email=? AND is_active=1", (email,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        c.close()
 
 
 def get_account_by_id(account_id: int):
-    c = init_accounts_db()
-    row = c.execute(
-        "SELECT * FROM accounts WHERE id=? AND is_active=1", (account_id,)
-    ).fetchone()
-    c.close()
-    return dict(row) if row else None
+    c = conn_accounts()
+    try:
+        row = c.execute(
+            "SELECT * FROM accounts WHERE id=? AND is_active=1", (account_id,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        c.close()
 
 
 def get_account_by_api_key(api_key: str):
-    c = init_accounts_db()
-    row = c.execute(
-        "SELECT * FROM accounts WHERE api_key=? AND is_active=1", (api_key,)
-    ).fetchone()
-    c.close()
-    return dict(row) if row else None
+    c = conn_accounts()
+    try:
+        row = c.execute(
+            "SELECT * FROM accounts WHERE api_key=? AND is_active=1", (api_key,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        c.close()
 
 
 # ─────────────────────────────────────────────
@@ -219,28 +240,29 @@ def get_score(slug: str, language: str = None, run_date: str = None) -> dict:
     """GEO Score composite pour la marque primaire."""
     cfg = CLIENTS_CONFIG[slug]
     c = conn_for(slug)
+    try:
+        q = """
+            SELECT AVG(res.geo_score) as avg_score,
+                   COUNT(DISTINCT r.id) as n_prompts,
+                   r.run_date
+            FROM results res
+            JOIN runs r   ON res.run_id = r.id
+            JOIN brands b ON res.brand_id = b.id
+            WHERE b.is_primary = 1 AND r.is_demo = 0
+        """
+        params = []
+        if run_date:
+            q += " AND r.run_date = ?"
+            params.append(run_date)
+        else:
+            q += " AND r.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)"
+        if language:
+            q += " AND r.language = ?"
+            params.append(language)
 
-    q = """
-        SELECT AVG(res.geo_score) as avg_score,
-               COUNT(DISTINCT r.id) as n_prompts,
-               r.run_date
-        FROM results res
-        JOIN runs r   ON res.run_id = r.id
-        JOIN brands b ON res.brand_id = b.id
-        WHERE b.is_primary = 1 AND r.is_demo = 0
-    """
-    params = []
-    if run_date:
-        q += " AND r.run_date = ?"
-        params.append(run_date)
-    else:
-        q += " AND r.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)"
-    if language:
-        q += " AND r.language = ?"
-        params.append(language)
-
-    row = c.execute(q, params).fetchone()
-    c.close()
+        row = c.execute(q, params).fetchone()
+    finally:
+        c.close()
 
     if not row or row["avg_score"] is None:
         return {"score": None, "n_prompts": 0, "run_date": None}
@@ -254,19 +276,21 @@ def get_score(slug: str, language: str = None, run_date: str = None) -> dict:
 def get_score_by_market(slug: str) -> list:
     """GEO Score par marché (langue)."""
     c = conn_for(slug)
-    rows = c.execute("""
-        SELECT r.language,
-               AVG(res.geo_score) as avg_score,
-               r.run_date
-        FROM results res
-        JOIN runs r   ON res.run_id = r.id
-        JOIN brands b ON res.brand_id = b.id
-        WHERE b.is_primary = 1 AND r.is_demo = 0
-          AND r.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)
-        GROUP BY r.language
-        ORDER BY avg_score DESC
-    """).fetchall()
-    c.close()
+    try:
+        rows = c.execute("""
+            SELECT r.language,
+                   AVG(res.geo_score) as avg_score,
+                   r.run_date
+            FROM results res
+            JOIN runs r   ON res.run_id = r.id
+            JOIN brands b ON res.brand_id = b.id
+            WHERE b.is_primary = 1 AND r.is_demo = 0
+              AND r.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)
+            GROUP BY r.language
+            ORDER BY avg_score DESC
+        """).fetchall()
+    finally:
+        c.close()
     return [{"language": r["language"], "score": round(r["avg_score"]),
              "run_date": r["run_date"]} for r in rows]
 
@@ -274,21 +298,23 @@ def get_score_by_market(slug: str) -> list:
 def get_nss(slug: str, language: str = None) -> int:
     """Net Sentiment Score : (positifs - négatifs) / total × 100."""
     c = conn_for(slug)
-    q = """
-        SELECT res.sentiment, COUNT(*) as n
-        FROM results res
-        JOIN runs r   ON res.run_id = r.id
-        JOIN brands b ON res.brand_id = b.id
-        WHERE b.is_primary = 1 AND r.is_demo = 0
-          AND r.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)
-    """
-    params = []
-    if language:
-        q += " AND r.language = ?"
-        params.append(language)
-    q += " GROUP BY res.sentiment"
-    rows = c.execute(q, params).fetchall()
-    c.close()
+    try:
+        q = """
+            SELECT res.sentiment, COUNT(*) as n
+            FROM results res
+            JOIN runs r   ON res.run_id = r.id
+            JOIN brands b ON res.brand_id = b.id
+            WHERE b.is_primary = 1 AND r.is_demo = 0
+              AND r.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)
+        """
+        params = []
+        if language:
+            q += " AND r.language = ?"
+            params.append(language)
+        q += " GROUP BY res.sentiment"
+        rows = c.execute(q, params).fetchall()
+    finally:
+        c.close()
     counts = {r["sentiment"]: r["n"] for r in rows}
     pos   = counts.get("positive", 0)
     neg   = counts.get("negative", 0)
@@ -299,22 +325,24 @@ def get_nss(slug: str, language: str = None) -> int:
 def get_competitors(slug: str, language: str = None, top: int = 10) -> list:
     """Classement de toutes les marques trackées."""
     c = conn_for(slug)
-    q = """
-        SELECT b.name, b.is_primary,
-               AVG(res.geo_score) as avg_score
-        FROM results res
-        JOIN runs r   ON res.run_id = r.id
-        JOIN brands b ON res.brand_id = b.id
-        WHERE r.is_demo = 0
-          AND r.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)
-    """
-    params = []
-    if language:
-        q += " AND r.language = ?"
-        params.append(language)
-    q += " GROUP BY b.id ORDER BY avg_score DESC"
-    rows = c.execute(q, params).fetchall()
-    c.close()
+    try:
+        q = """
+            SELECT b.name, b.is_primary,
+                   AVG(res.geo_score) as avg_score
+            FROM results res
+            JOIN runs r   ON res.run_id = r.id
+            JOIN brands b ON res.brand_id = b.id
+            WHERE r.is_demo = 0
+              AND r.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)
+        """
+        params = []
+        if language:
+            q += " AND r.language = ?"
+            params.append(language)
+        q += " GROUP BY b.id ORDER BY avg_score DESC"
+        rows = c.execute(q, params).fetchall()
+    finally:
+        c.close()
     return [{"name": r["name"], "is_primary": bool(r["is_primary"]),
              "score": round(r["avg_score"])} for r in rows[:top]]
 
@@ -322,21 +350,23 @@ def get_competitors(slug: str, language: str = None, top: int = 10) -> list:
 def get_history(slug: str, n_weeks: int = 12, language: str = None) -> list:
     """Historique GEO Score semaine par semaine."""
     c = conn_for(slug)
-    q = """
-        SELECT r.run_date, AVG(res.geo_score) as avg_score
-        FROM results res
-        JOIN runs r   ON res.run_id = r.id
-        JOIN brands b ON res.brand_id = b.id
-        WHERE b.is_primary = 1 AND r.is_demo = 0
-    """
-    params = []
-    if language:
-        q += " AND r.language = ?"
-        params.append(language)
-    q += " GROUP BY r.run_date ORDER BY r.run_date DESC LIMIT ?"
-    params.append(n_weeks)
-    rows = c.execute(q, params).fetchall()
-    c.close()
+    try:
+        q = """
+            SELECT r.run_date, AVG(res.geo_score) as avg_score
+            FROM results res
+            JOIN runs r   ON res.run_id = r.id
+            JOIN brands b ON res.brand_id = b.id
+            WHERE b.is_primary = 1 AND r.is_demo = 0
+        """
+        params = []
+        if language:
+            q += " AND r.language = ?"
+            params.append(language)
+        q += " GROUP BY r.run_date ORDER BY r.run_date DESC LIMIT ?"
+        params.append(n_weeks)
+        rows = c.execute(q, params).fetchall()
+    finally:
+        c.close()
     return [{"date": r["run_date"], "score": round(r["avg_score"])}
             for r in reversed(rows)]
 
@@ -344,24 +374,26 @@ def get_history(slug: str, n_weeks: int = 12, language: str = None) -> list:
 def get_weak_prompts(slug: str, threshold: int = 50, language: str = None) -> list:
     """Prompts sous-performants — base des recommandations."""
     c = conn_for(slug)
-    q = """
-        SELECT p.text, p.category, p.language,
-               AVG(res.geo_score) as avg_score
-        FROM prompts p
-        JOIN runs r     ON p.client_id = r.prompt_id  -- workaround: join via prompt text
-        JOIN results res ON res.run_id = r.id
-        JOIN brands b   ON res.brand_id = b.id
-        WHERE b.is_primary = 1 AND r.is_demo = 0
-          AND r.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)
-    """
-    params = []
-    if language:
-        q += " AND r.language = ?"
-        params.append(language)
-    q += " GROUP BY p.id HAVING avg_score < ? ORDER BY avg_score ASC LIMIT 10"
-    params.append(threshold)
-    rows = c.execute(q, params).fetchall()
-    c.close()
+    try:
+        q = """
+            SELECT p.text, p.category, p.language,
+                   AVG(res.geo_score) as avg_score
+            FROM prompts p
+            JOIN runs r     ON r.prompt_id = p.id
+            JOIN results res ON res.run_id = r.id
+            JOIN brands b   ON res.brand_id = b.id
+            WHERE b.is_primary = 1 AND r.is_demo = 0
+              AND r.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)
+        """
+        params = []
+        if language:
+            q += " AND r.language = ?"
+            params.append(language)
+        q += " GROUP BY p.id HAVING avg_score < ? ORDER BY avg_score ASC LIMIT 10"
+        params.append(threshold)
+        rows = c.execute(q, params).fetchall()
+    finally:
+        c.close()
     return [{"text": r["text"], "category": r["category"],
              "language": r["language"], "score": round(r["avg_score"])} for r in rows]
 
@@ -390,44 +422,49 @@ def get_all_stats() -> dict:
 # ─────────────────────────────────────────────
 
 def get_alerts(slug: str, unread_only: bool = False, limit: int = 20) -> list:
-    c = init_accounts_db()
-    q = "SELECT * FROM alerts WHERE client_slug=?"
-    params = [slug]
-    if unread_only:
-        q += " AND is_read=0"
-    q += " ORDER BY created_at DESC LIMIT ?"
-    params.append(limit)
-    rows = c.execute(q, params).fetchall()
-    c.close()
-    return [dict(r) for r in rows]
+    c = conn_accounts()
+    try:
+        q = "SELECT * FROM alerts WHERE client_slug=?"
+        params = [slug]
+        if unread_only:
+            q += " AND is_read=0"
+        q += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = c.execute(q, params).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        c.close()
 
 
 def create_alert(slug: str, alert_type: str, severity: str,
                  title: str, body: str) -> bool:
     """Crée une alerte si elle n'existe pas déjà dans les 24h."""
-    c = init_accounts_db()
-    existing = c.execute("""
-        SELECT id FROM alerts
-        WHERE client_slug=? AND type=? AND title=?
-        AND created_at > datetime('now', '-24 hours')
-    """, (slug, alert_type, title)).fetchone()
-    if existing:
+    c = conn_accounts()
+    try:
+        existing = c.execute("""
+            SELECT id FROM alerts
+            WHERE client_slug=? AND type=? AND title=?
+            AND created_at > datetime('now', '-24 hours')
+        """, (slug, alert_type, title)).fetchone()
+        if existing:
+            return False
+        c.execute(
+            "INSERT INTO alerts (client_slug, type, severity, title, body) VALUES (?,?,?,?,?)",
+            (slug, alert_type, severity, title, body)
+        )
+        c.commit()
+        return True
+    finally:
         c.close()
-        return False
-    c.execute(
-        "INSERT INTO alerts (client_slug, type, severity, title, body) VALUES (?,?,?,?,?)",
-        (slug, alert_type, severity, title, body)
-    )
-    c.commit()
-    c.close()
-    return True
 
 
 def mark_alert_read(alert_id: int):
-    c = init_accounts_db()
-    c.execute("UPDATE alerts SET is_read=1 WHERE id=?", (alert_id,))
-    c.commit()
-    c.close()
+    c = conn_accounts()
+    try:
+        c.execute("UPDATE alerts SET is_read=1 WHERE id=?", (alert_id,))
+        c.commit()
+    finally:
+        c.close()
 
 
 # ─────────────────────────────────────────────
@@ -435,15 +472,17 @@ def mark_alert_read(alert_id: int):
 # ─────────────────────────────────────────────
 
 def get_recommendations(slug: str, done: bool = False, limit: int = 20) -> list:
-    c = init_accounts_db()
-    rows = c.execute("""
-        SELECT * FROM recommendations
-        WHERE client_slug=? AND is_done=?
-        ORDER BY priority DESC, impact_score DESC
-        LIMIT ?
-    """, (slug, 1 if done else 0, limit)).fetchall()
-    c.close()
-    return [dict(r) for r in rows]
+    c = conn_accounts()
+    try:
+        rows = c.execute("""
+            SELECT * FROM recommendations
+            WHERE client_slug=? AND is_done=?
+            ORDER BY priority DESC, impact_score DESC
+            LIMIT ?
+        """, (slug, 1 if done else 0, limit)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        c.close()
 
 
 def create_recommendation(slug: str, title: str, body: str,
@@ -451,34 +490,37 @@ def create_recommendation(slug: str, title: str, body: str,
                           impact_score: float = 10.0,
                           prompt_text: str = None,
                           run_date: str = None) -> int:
-    c = init_accounts_db()
-    # Éviter les doublons (même titre dans les 7 jours)
-    existing = c.execute("""
-        SELECT id FROM recommendations
-        WHERE client_slug=? AND title=?
-        AND created_at > datetime('now', '-7 days')
-        AND is_done=0
-    """, (slug, title)).fetchone()
-    if existing:
+    c = conn_accounts()
+    try:
+        # Éviter les doublons (même titre dans les 7 jours)
+        existing = c.execute("""
+            SELECT id FROM recommendations
+            WHERE client_slug=? AND title=?
+            AND created_at > datetime('now', '-7 days')
+            AND is_done=0
+        """, (slug, title)).fetchone()
+        if existing:
+            return existing["id"]
+        c.execute("""
+            INSERT INTO recommendations
+            (client_slug, title, body, category, priority, impact_score, prompt_text, run_date)
+            VALUES (?,?,?,?,?,?,?,?)
+        """, (slug, title, body, category, priority, impact_score,
+              prompt_text, run_date or date.today().isoformat()))
+        c.commit()
+        rid = c.execute("SELECT last_insert_rowid() as id").fetchone()["id"]
+        return rid
+    finally:
         c.close()
-        return existing["id"]
-    c.execute("""
-        INSERT INTO recommendations
-        (client_slug, title, body, category, priority, impact_score, prompt_text, run_date)
-        VALUES (?,?,?,?,?,?,?,?)
-    """, (slug, title, body, category, priority, impact_score,
-          prompt_text, run_date or date.today().isoformat()))
-    c.commit()
-    rid = c.execute("SELECT last_insert_rowid() as id").fetchone()["id"]
-    c.close()
-    return rid
 
 
 def mark_recommendation_done(rec_id: int):
-    c = init_accounts_db()
-    c.execute("UPDATE recommendations SET is_done=1 WHERE id=?", (rec_id,))
-    c.commit()
-    c.close()
+    c = conn_accounts()
+    try:
+        c.execute("UPDATE recommendations SET is_done=1 WHERE id=?", (rec_id,))
+        c.commit()
+    finally:
+        c.close()
 
 
 # ─────────────────────────────────────────────
@@ -487,11 +529,13 @@ def mark_recommendation_done(rec_id: int):
 
 def status() -> dict:
     """Retourne l'état complet — utilisé par /health."""
-    c = init_accounts_db()
-    n_accounts = c.execute("SELECT COUNT(*) as n FROM accounts").fetchone()["n"]
-    n_alerts   = c.execute("SELECT COUNT(*) as n FROM alerts WHERE is_read=0").fetchone()["n"]
-    n_recos    = c.execute("SELECT COUNT(*) as n FROM recommendations WHERE is_done=0").fetchone()["n"]
-    c.close()
+    c = conn_accounts()
+    try:
+        n_accounts = c.execute("SELECT COUNT(*) as n FROM accounts").fetchone()["n"]
+        n_alerts   = c.execute("SELECT COUNT(*) as n FROM alerts WHERE is_read=0").fetchone()["n"]
+        n_recos    = c.execute("SELECT COUNT(*) as n FROM recommendations WHERE is_done=0").fetchone()["n"]
+    finally:
+        c.close()
     return {
         "accounts":       n_accounts,
         "unread_alerts":  n_alerts,

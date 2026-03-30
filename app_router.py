@@ -145,11 +145,7 @@ app = dash.Dash(
 # LAYOUT
 # ─────────────────────────────────────────────
 
-def score_color(s):
-    if s is None: return C["text3"]
-    if s >= 70:   return C["ng"]
-    if s >= 45:   return "#D97706"
-    return "#DC2626"
+# score_color importé depuis theme.py (ligne 30) — ne pas redéfinir ici
 
 
 def client_card(key: str) -> html.Div:
@@ -272,7 +268,7 @@ def landing_layout():
         html.Div([
             html.Div([
                 html.Div("SÉLECTION CLIENT", style={
-                    "fontSize": 10, "fontWeight": 700, "color": C["gold"],
+                    "fontSize": 10, "fontWeight": 700, "color": C["text3"],
                     "letterSpacing": "3px", "marginBottom": 8,
                 }),
                 html.Div("Choisissez un client", style={

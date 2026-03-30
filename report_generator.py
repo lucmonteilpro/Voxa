@@ -58,7 +58,7 @@ CLIENTS = {
         "db":      BASE_DIR / "voxa.db",
         "name":    "PSG",
         "full":    "Paris Saint-Germain",
-        "primary": "OM",
+        "primary": "PSG",
         "vertical":"sport",
         "markets": ["fr", "en"],
     },

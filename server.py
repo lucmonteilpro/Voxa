@@ -14,6 +14,8 @@ import os
 import re
 import json
 import secrets
+import logging
+import smtplib
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +31,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 BASE_DIR = Path(__file__).parent.resolve()
+
+log = logging.getLogger("voxa")
+if not log.handlers:
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s [%(levelname)s] %(message)s",
+                        datefmt="%Y-%m-%d %H:%M:%S")
 
 import voxa_db as vdb
 import theme as T
@@ -250,15 +258,15 @@ def contact():
                   (email, name, brand, score, vert))
         c.commit()
         c.close()
-    except Exception:
-        pass
+        log.info(f"Lead enregistré : {email} / {brand}")
+    except Exception as e:
+        log.error(f"Erreur lead DB : {e}")
 
     # Email de notification
     smtp_user = os.getenv("SMTP_USER", "")
     smtp_pwd  = os.getenv("SMTP_PASSWORD", "")
     if smtp_user and smtp_pwd:
         try:
-            import smtplib
             from email.mime.text import MIMEText
             msg = MIMEText(
                 f"Nouveau lead Voxa\n\n"
@@ -277,8 +285,9 @@ def contact():
                 s.starttls()
                 s.login(smtp_user, smtp_pwd)
                 s.sendmail(smtp_user, ["luc@sharper-media.com"], msg.as_string())
-        except Exception:
-            pass
+            log.info(f"Email lead envoyé : {email}")
+        except Exception as e:
+            log.error(f"Erreur SMTP lead : {e}")
 
     # Confirmation HTML
     body = f"""
@@ -333,8 +342,8 @@ def demo():
         # Lead capture affiché après les résultats
         score_val = ""
         try:
-            import re as _re
-            m = _re.search(r'font-size:32px[^>]+>(\d+)', score_html)
+            # re already imported at top
+            m = re.search(r'font-size:32px[^>]+>(\d+)', score_html)
             if m: score_val = m.group(1)
         except Exception:
             pass
@@ -442,7 +451,7 @@ def _demo_geo_score(brand, vert, mkt):
       Sentiment 20 pts : ton positif autour de la mention
       Fréquence 10 pts : citée 2+ fois
     """
-    import re as _re
+    # re already imported at top
 
     pm = {
         "sport": [
@@ -536,9 +545,9 @@ def _demo_geo_score(brand, vert, mkt):
             ans = r.content[0].text
 
             # Nettoyage markdown
-            ans_c = _re.sub(r'\*\*(.+?)\*\*', r'\1', ans)
-            ans_c = _re.sub(r'\*(.+?)\*',     r'\1', ans_c)
-            ans_c = _re.sub(r'^#{1,3}\s+',    '',    ans_c, flags=_re.MULTILINE)
+            ans_c = re.sub(r'\*\*(.+?)\*\*', r'\1', ans)
+            ans_c = re.sub(r'\*(.+?)\*',     r'\1', ans_c)
+            ans_c = re.sub(r'^#{1,3}\s+',    '',    ans_c, flags=re.MULTILINE)
             ans_c = ans_c.strip()
             ans_l = ans_c.lower()
 
@@ -945,34 +954,32 @@ def admin_new_client():
                         break
 
             # Sauvegarder la config
-            import pathlib
-            config_dir = pathlib.Path(BASE_DIR) / "configs"
+            config_dir = Path(BASE_DIR) / "configs"
             config_dir.mkdir(exist_ok=True)
             config_path = config_dir / f"{slug}.json"
             with open(config_path, "w") as f:
                 json.dump(cfg, f, ensure_ascii=False, indent=2)
 
             # Lancer un premier run démo en arrière-plan
-            import threading
             def first_run():
                 try:
                     import tracker_generic as tg
                     tg.run_tracker(cfg, demo_mode=True)
-                    print(f"  ✓ Premier run démo terminé pour {client_name}")
+                    log.info(f"Premier run démo terminé pour {client_name}")
                 except Exception as e:
-                    print(f"  ✗ Erreur premier run : {e}")
+                    log.error(f"Erreur premier run : {e}")
             threading.Thread(target=first_run, daemon=True).start()
 
             msg = f"ok:{slug}"
 
     # Lister les configs existantes
-    import pathlib, json as _json
-    config_dir = pathlib.Path(BASE_DIR) / "configs"
+    config_dir = Path(BASE_DIR) / "configs"
     config_dir.mkdir(exist_ok=True)
     existing = []
     for p in sorted(config_dir.glob("*.json")):
         try:
-            c = _json.load(open(p))
+            with open(p, encoding="utf-8") as fp:
+                c = json.load(fp)
             existing.append({"slug": c.get("slug",""), "name": c.get("client_name",""),
                              "vertical": c.get("vertical",""), "markets": c.get("markets",[])})
         except Exception:

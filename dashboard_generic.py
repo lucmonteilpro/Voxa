@@ -1,22 +1,22 @@
 """
-Voxa — Dashboard Générique v1.0
+Voxa — Dashboard Générique v2.0
 ================================
-Un seul fichier Dash paramétré par config JSON.
-Fonctionne pour Reims, Le Havre, ASSE, Monaco, et tous les futurs clients.
+Dashboard Dash unique paramétré par config JSON.
+Remplace dashboard.py (PSG) et dashboard_betclic.py (Betclic).
 
 Usage direct :
-    python3 dashboard_generic.py --config configs/reims.json --port 8051
+    python3 dashboard_generic.py --slug psg --port 8050
+    python3 dashboard_generic.py --slug betclic --port 8051
 
 Intégration wsgi.py :
     from dashboard_generic import make_dashboard
-    reims_server = make_dashboard("reims").server
+    app = make_dashboard("psg")
+    psg_server = app.server
 """
 
 import os
-import sys
 import json
 import sqlite3
-import argparse
 from datetime import date
 from pathlib import Path
 
@@ -27,9 +27,10 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output
 
 import theme as T
-from theme import (P, C1, C2, NG, BG, BG3, BD, W, T2, T3, RED, GRD,
+from theme import (P, C1, C2, NG, BG, BG2, BG3, BD, BD2, W, T2, T3, RED, GRD,
                    FONTS_URL, DASH_CSS, score_color, score_label,
-                   card_style, card_title_style, kpi_value_style, badge_style)
+                   card_style, card_title_style, kpi_value_style, badge_style,
+                   FONT_BODY)
 
 BASE_DIR = Path(__file__).parent.resolve()
 
@@ -38,6 +39,18 @@ BASE_DIR = Path(__file__).parent.resolve()
 # DB HELPERS (génériques)
 # ─────────────────────────────────────────────
 
+def _resolve_db_path(slug: str) -> str:
+    """Résout le chemin DB : d'abord voxa_db.CLIENTS_CONFIG, puis voxa_{slug}.db."""
+    try:
+        import voxa_db as vdb
+        cfg = vdb.CLIENTS_CONFIG.get(slug)
+        if cfg and cfg["db"].exists():
+            return str(cfg["db"])
+    except Exception:
+        pass
+    return str(BASE_DIR / f"voxa_{slug}.db")
+
+
 def _conn(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -45,162 +58,260 @@ def _conn(db_path: str) -> sqlite3.Connection:
 
 
 def load_scores(db_path: str, language: str = None) -> pd.DataFrame:
-    """Score moyen par marque sur le dernier run."""
     conn = _conn(db_path)
-    where = "AND p.language = ?" if language and language != "all" else ""
-    params = [language] if language and language != "all" else []
-    rows = conn.execute(f"""
-        SELECT b.name, b.is_primary, AVG(r.geo_score) as score,
-               AVG(r.mentioned) as mention_rate,
-               AVG(r.mention_count) as freq
-        FROM results r
-        JOIN runs ru    ON r.run_id = ru.id
-        JOIN brands b   ON r.brand_id = b.id
-        JOIN prompts p  ON ru.prompt_id = p.id
-        WHERE ru.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)
-          AND ru.is_demo = 0
-          {where}
-        GROUP BY b.id
-        ORDER BY score DESC
-    """, params).fetchall()
-    if not rows:
-        # Fallback sur démo
+    try:
+        where = "AND p.language = ?" if language and language != "all" else ""
+        params = [language] if language and language != "all" else []
         rows = conn.execute(f"""
             SELECT b.name, b.is_primary, AVG(r.geo_score) as score,
                    AVG(r.mentioned) as mention_rate, AVG(r.mention_count) as freq
             FROM results r
-            JOIN runs ru  ON r.run_id = ru.id
+            JOIN runs ru ON r.run_id = ru.id
             JOIN brands b ON r.brand_id = b.id
             JOIN prompts p ON ru.prompt_id = p.id
-            WHERE ru.run_date = (SELECT MAX(run_date) FROM runs)
-              {where}
+            WHERE ru.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)
+              AND ru.is_demo = 0 {where}
             GROUP BY b.id ORDER BY score DESC
         """, params).fetchall()
-    conn.close()
+        if not rows:
+            rows = conn.execute(f"""
+                SELECT b.name, b.is_primary, AVG(r.geo_score) as score,
+                       AVG(r.mentioned) as mention_rate, AVG(r.mention_count) as freq
+                FROM results r
+                JOIN runs ru ON r.run_id = ru.id
+                JOIN brands b ON r.brand_id = b.id
+                JOIN prompts p ON ru.prompt_id = p.id
+                WHERE ru.run_date = (SELECT MAX(run_date) FROM runs) {where}
+                GROUP BY b.id ORDER BY score DESC
+            """, params).fetchall()
+    finally:
+        conn.close()
     return pd.DataFrame([dict(r) for r in rows]) if rows else pd.DataFrame()
+
+
+def load_scores_by_category(db_path: str, brand: str, language: str = None) -> dict:
+    conn = _conn(db_path)
+    try:
+        where_lang = "AND p.language = ?" if language and language != "all" else ""
+        params = [brand] + ([language] if language and language != "all" else [])
+        rows = conn.execute(f"""
+            SELECT p.category, AVG(r.geo_score) as score
+            FROM results r
+            JOIN runs ru ON r.run_id = ru.id
+            JOIN brands b ON r.brand_id = b.id
+            JOIN prompts p ON ru.prompt_id = p.id
+            WHERE b.name = ? AND ru.is_demo = 0
+              AND ru.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)
+              {where_lang}
+            GROUP BY p.category
+        """, params).fetchall()
+    finally:
+        conn.close()
+    return {r["category"]: round(r["score"]) for r in rows}
 
 
 def load_history(db_path: str, brand: str, n_weeks: int = 10) -> list:
     conn = _conn(db_path)
-    rows = conn.execute("""
-        SELECT ru.run_date, AVG(r.geo_score) as score
-        FROM results r
-        JOIN runs ru  ON r.run_id = ru.id
-        JOIN brands b ON r.brand_id = b.id
-        WHERE b.name = ? AND ru.is_demo = 0
-        GROUP BY ru.run_date ORDER BY ru.run_date ASC
-        LIMIT ?
-    """, (brand, n_weeks)).fetchall()
-    if not rows:
+    try:
         rows = conn.execute("""
             SELECT ru.run_date, AVG(r.geo_score) as score
             FROM results r
-            JOIN runs ru  ON r.run_id = ru.id
+            JOIN runs ru ON r.run_id = ru.id
             JOIN brands b ON r.brand_id = b.id
-            WHERE b.name = ?
+            WHERE b.name = ? AND ru.is_demo = 0
             GROUP BY ru.run_date ORDER BY ru.run_date ASC LIMIT ?
         """, (brand, n_weeks)).fetchall()
-    conn.close()
+        if not rows:
+            rows = conn.execute("""
+                SELECT ru.run_date, AVG(r.geo_score) as score
+                FROM results r JOIN runs ru ON r.run_id = ru.id
+                JOIN brands b ON r.brand_id = b.id
+                WHERE b.name = ?
+                GROUP BY ru.run_date ORDER BY ru.run_date ASC LIMIT ?
+            """, (brand, n_weeks)).fetchall()
+    finally:
+        conn.close()
     return [dict(r) for r in rows]
 
 
 def load_prompts(db_path: str, brand: str, language: str = None, limit: int = 20) -> list:
     conn = _conn(db_path)
-    where = "AND p.language = ?" if language and language != "all" else ""
-    params = [brand, limit] if not (language and language != "all") else [brand, language, limit]
-    rows = conn.execute(f"""
-        SELECT p.text, p.category, p.language,
-               AVG(r.geo_score) as score,
-               AVG(r.mentioned) as mention
-        FROM results r
-        JOIN runs ru   ON r.run_id = ru.id
-        JOIN brands b  ON r.brand_id = b.id
-        JOIN prompts p ON ru.prompt_id = p.id
-        WHERE b.name = ? AND ru.is_demo = 0
-          {where}
-        GROUP BY p.id ORDER BY score ASC LIMIT ?
-    """, params).fetchall()
-    if not rows:
+    try:
+        where = "AND p.language = ?" if language and language != "all" else ""
+        params = [brand] + ([language] if language and language != "all" else []) + [limit]
         rows = conn.execute(f"""
             SELECT p.text, p.category, p.language,
                    AVG(r.geo_score) as score, AVG(r.mentioned) as mention
             FROM results r
-            JOIN runs ru  ON r.run_id = ru.id
+            JOIN runs ru ON r.run_id = ru.id
             JOIN brands b ON r.brand_id = b.id
             JOIN prompts p ON ru.prompt_id = p.id
-            WHERE b.name = ? {where}
+            WHERE b.name = ? AND ru.is_demo = 0 {where}
             GROUP BY p.id ORDER BY score ASC LIMIT ?
         """, params).fetchall()
-    conn.close()
+        if not rows:
+            rows = conn.execute(f"""
+                SELECT p.text, p.category, p.language,
+                       AVG(r.geo_score) as score, AVG(r.mentioned) as mention
+                FROM results r JOIN runs ru ON r.run_id = ru.id
+                JOIN brands b ON r.brand_id = b.id
+                JOIN prompts p ON ru.prompt_id = p.id
+                WHERE b.name = ? {where}
+                GROUP BY p.id ORDER BY score ASC LIMIT ?
+            """, params).fetchall()
+    finally:
+        conn.close()
     return [dict(r) for r in rows]
 
 
 def load_last_run_date(db_path: str) -> str:
     conn = _conn(db_path)
-    row = conn.execute("SELECT MAX(run_date) as d FROM runs").fetchone()
-    conn.close()
+    try:
+        row = conn.execute("SELECT MAX(run_date) as d FROM runs").fetchone()
+    finally:
+        conn.close()
     return row["d"] if row and row["d"] else str(date.today())
 
 
 def load_markets(db_path: str) -> list:
     conn = _conn(db_path)
-    rows = conn.execute("SELECT DISTINCT language FROM prompts ORDER BY language").fetchall()
-    conn.close()
+    try:
+        rows = conn.execute("SELECT DISTINCT language FROM prompts ORDER BY language").fetchall()
+    finally:
+        conn.close()
     return [r["language"] for r in rows]
 
 
 def load_nss(db_path: str, brand: str, language: str = None) -> int:
-    """Net Sentiment Score = (positifs - négatifs) / total * 100."""
     conn = _conn(db_path)
-    where = "AND p.language = ?" if language and language != "all" else ""
-    params = [brand] + ([language] if language and language != "all" else [])
-    rows = conn.execute(f"""
-        SELECT r.sentiment
-        FROM results r
-        JOIN runs ru  ON r.run_id = ru.id
-        JOIN brands b ON r.brand_id = b.id
-        JOIN prompts p ON ru.prompt_id = p.id
-        WHERE b.name = ? AND ru.is_demo = 0 {where}
-    """, params).fetchall()
-    if not rows:
+    try:
+        where = "AND p.language = ?" if language and language != "all" else ""
+        params = [brand] + ([language] if language and language != "all" else [])
         rows = conn.execute(f"""
             SELECT r.sentiment FROM results r
             JOIN runs ru ON r.run_id = ru.id
             JOIN brands b ON r.brand_id = b.id
             JOIN prompts p ON ru.prompt_id = p.id
-            WHERE b.name = ? {where}
+            WHERE b.name = ? AND ru.is_demo = 0 {where}
         """, params).fetchall()
-    conn.close()
+    finally:
+        conn.close()
     sents = [r["sentiment"] for r in rows]
     if not sents:
         return 0
-    pos = sents.count("positive")
-    neg = sents.count("negative")
-    return round((pos - neg) / len(sents) * 100)
+    return round((sents.count("positive") - sents.count("negative")) / len(sents) * 100)
+
+
+def load_gap_analysis(db_path: str, language: str = None) -> pd.DataFrame:
+    conn = _conn(db_path)
+    try:
+        where = "AND p.language = ?" if language and language != "all" else ""
+        params = [language] if language and language != "all" else []
+        rows = conn.execute(f"""
+            SELECT b.name, p.category, AVG(r.geo_score) as score
+            FROM results r
+            JOIN runs ru ON r.run_id = ru.id
+            JOIN brands b ON r.brand_id = b.id
+            JOIN prompts p ON ru.prompt_id = p.id
+            WHERE ru.is_demo = 0
+              AND ru.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0) {where}
+            GROUP BY b.name, p.category
+        """, params).fetchall()
+    finally:
+        conn.close()
+    if not rows:
+        return pd.DataFrame()
+    data = {}
+    for r in rows:
+        data.setdefault(r["name"], {})[r["category"]] = round(r["score"])
+    return pd.DataFrame(data).T
+
+
+# ─────────────────────────────────────────────
+# RECOMMENDATIONS ENGINE
+# ─────────────────────────────────────────────
+
+def generate_recommendations(db_path, brand, vertical, language=None, cat_labels=None):
+    recos = []
+    cat_labels = cat_labels or {}
+    cat_scores = load_scores_by_category(db_path, brand, language)
+    if cat_scores:
+        worst_cat = min(cat_scores, key=cat_scores.get)
+        best_cat  = max(cat_scores, key=cat_scores.get)
+        gap = cat_scores[best_cat] - cat_scores[worst_cat]
+        if gap >= 30:
+            recos.append({"priority": "haute", "icon": "⚠",
+                "title": f"Écart critique : {cat_labels.get(worst_cat, worst_cat)} ({cat_scores[worst_cat]}) vs {cat_labels.get(best_cat, best_cat)} ({cat_scores[best_cat]})",
+                "body": f"Écart de {gap} pts. Enrichir le contenu éditorial et FAQ sur \"{cat_labels.get(worst_cat, worst_cat)}\"."})
+        elif cat_scores[worst_cat] < 40:
+            recos.append({"priority": "haute", "icon": "⚠",
+                "title": f"Faible score en {cat_labels.get(worst_cat, worst_cat)} : {cat_scores[worst_cat]}/100",
+                "body": f"Les LLMs ne citent quasiment pas {brand} sur ces requêtes. Angle mort à combler."})
+
+    df_all = load_scores(db_path, language)
+    if not df_all.empty:
+        pr = df_all[df_all["name"] == brand]
+        if not pr.empty:
+            rank = df_all.index.get_loc(pr.index[0]) + 1
+            leader = df_all.iloc[0]
+            if rank > 1:
+                delta = round(leader["score"] - pr["score"].values[0])
+                recos.append({"priority": "moyenne", "icon": "◎",
+                    "title": f"{brand} #{rank}/{len(df_all)} — {delta} pts derrière {leader['name']}",
+                    "body": f"Analyser les sources web des LLMs pour {leader['name']} et produire du contenu équivalent."})
+            else:
+                recos.append({"priority": "info", "icon": "✓",
+                    "title": f"{brand} #1 — position dominante",
+                    "body": f"Leader GEO avec {round(pr['score'].values[0])}/100. Maintenir via monitoring hebdomadaire."})
+
+    absent_prompts = load_prompts(db_path, brand, language, limit=50)
+    if absent_prompts:
+        absent = [p for p in absent_prompts if p.get("mention", 0) < 0.5]
+        if absent:
+            pct = round(len(absent) / len(absent_prompts) * 100)
+            recos.append({"priority": "haute" if pct >= 40 else "moyenne", "icon": "✗",
+                "title": f"{brand} absent de {len(absent)}/{len(absent_prompts)} réponses ({pct}%)",
+                "body": f"Créer du contenu structuré (Schema JSON-LD, FAQ) pour ces requêtes."})
+
+    if not recos:
+        recos.append({"priority": "info", "icon": "✓",
+            "title": "Bonne performance globale",
+            "body": f"{brand} affiche de bons scores. Continuer le monitoring."})
+    return recos
 
 
 # ─────────────────────────────────────────────
 # FACTORY — crée une app Dash par config
 # ─────────────────────────────────────────────
 
-def make_dashboard(slug: str) -> dash.Dash:
+def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
+    """Crée et retourne une app Dash complète pour un slug donné.
+    
+    Args:
+        slug: identifiant client (psg, betclic, reims...)
+        standalone: True pour test local (pas de préfixe URL),
+                    False pour prod via DispatcherMiddleware wsgi.py
     """
-    Crée et retourne une app Dash complète pour un slug donné.
-    Charge automatiquement la config depuis configs/{slug}.json
-    et la DB depuis voxa_{slug}.db.
-    """
-    # Charger la config
-    config_path = BASE_DIR / "configs" / f"{slug}.json"
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config introuvable : {config_path}")
-    with open(config_path, encoding="utf-8") as f:
-        cfg = json.load(f)
 
-    db_path    = str(BASE_DIR / f"voxa_{slug}.db")
-    brand      = cfg["primary_brand"]
+    # ── Charger la config ──────────────────────
+    config_path = BASE_DIR / "configs" / f"{slug}.json"
+    if config_path.exists():
+        with open(config_path, encoding="utf-8") as f:
+            cfg = json.load(f)
+    else:
+        try:
+            import voxa_db as vdb
+            vc = vdb.CLIENTS_CONFIG[slug]
+            cfg = {"slug": slug, "client_name": vc["name"],
+                   "primary_brand": vc["primary"], "vertical": vc["vertical"],
+                   "markets": vc["markets"]}
+        except Exception:
+            raise FileNotFoundError(f"Ni config JSON ni voxa_db pour '{slug}'")
+
+    db_path     = _resolve_db_path(slug)
+    brand       = cfg["primary_brand"]
     client_name = cfg["client_name"]
-    vertical   = cfg.get("vertical", "sport")
-    division   = cfg.get("division", "ligue1")
+    vertical    = cfg.get("vertical", "sport")
 
     LANG_FLAGS = {"fr": "🇫🇷", "en": "🇬🇧", "pt": "🇵🇹", "pl": "🇵🇱",
                   "fr-ci": "🇨🇮", "fr_ligue2": "🇫🇷"}
@@ -212,380 +323,365 @@ def make_dashboard(slug: str) -> dash.Dash:
     }
 
     # ── App Dash ──────────────────────────────
+    # En standalone (test local), pas de préfixe → routes à /
+    # En production (wsgi.py DispatcherMiddleware), préfixe /{slug}/
+    prefix = "/" if standalone else f"/{slug}/"
+
     app = dash.Dash(
-        __name__,
-        server=True,
-        requests_pathname_prefix=f"/{slug}/",
+        __name__, server=True,
+        requests_pathname_prefix=prefix,
         external_stylesheets=[dbc.themes.BOOTSTRAP, FONTS_URL],
         suppress_callback_exceptions=True,
         title=f"Voxa · {client_name}",
     )
     app.index_string = app.index_string.replace("</head>", T.DASH_CSS + "</head>")
 
-    # ── Helpers locaux ────────────────────────
     def card(children, extra=None):
-        style = {**card_style(), **(extra or {})}
-        return html.Div(children, style=style)
+        return html.Div(children, style={**card_style(), **(extra or {})})
 
     def ctitle(text):
         return html.Div(text, style={
             "fontSize": 10, "fontWeight": 700, "textTransform": "uppercase",
             "letterSpacing": "2px", "color": T3, "marginBottom": 14,
-            "fontFamily": T.FONT_BODY,
-        })
+            "fontFamily": FONT_BODY})
 
-    # ── Topbar ────────────────────────────────
-    topbar = T.make_topbar(
-        client_name=client_name,
-        vertical=vertical,
+    # ── Données initiales ─────────────────────
+    markets_from_db = load_markets(db_path)
+    has_multi_markets = len(markets_from_db) >= 3
+    market_opts = [{"label": "🌐 Tous", "value": "all"}] + [
+        {"label": f"{LANG_FLAGS.get(m,'🌐')} {m.upper()}", "value": m}
+        for m in markets_from_db]
+
+    topbar = T.make_topbar(client_name=client_name, vertical=vertical,
         right_children=[
-            html.A("↓ CSV", id=f"export-{slug}", href=f"/export/{slug}/csv",
+            html.A("↓ CSV", id=f"export-{slug}", href=f"{prefix}export/csv",
                    style={"padding": "6px 12px", "borderRadius": 8,
                           "border": f"1px solid {BD}", "background": BG3,
                           "fontSize": 12, "fontWeight": 600, "color": T2,
-                          "textDecoration": "none"}),
-        ]
-    )
+                          "textDecoration": "none"})])
+
+    tab_s  = {"fontSize": 11, "fontWeight": 700, "letterSpacing": "1px", "color": T3}
+    tab_sa = {"color": C1}
+    tabs_list = [
+        dbc.Tab(label="CLASSEMENT", tab_id="ranking", label_style=tab_s, active_label_style=tab_sa),
+        dbc.Tab(label="INSIGHTS", tab_id="insights", label_style=tab_s, active_label_style=tab_sa),
+    ]
+    if has_multi_markets:
+        tabs_list.append(dbc.Tab(label="MULTI-MARCHÉS", tab_id="overview",
+                                 label_style=tab_s, active_label_style=tab_sa))
+    tabs_list += [
+        dbc.Tab(label="PROMPTS", tab_id="prompts", label_style=tab_s, active_label_style=tab_sa),
+        dbc.Tab(label="BIBLIOTHÈQUE", tab_id="library", label_style=tab_s, active_label_style=tab_sa),
+    ]
 
     # ── Layout ────────────────────────────────
-    markets_from_db = load_markets(db_path)
-    market_opts = [{"label": f"{LANG_FLAGS.get(m,'🌐')} {m.upper()}", "value": m}
-                   for m in markets_from_db]
-    market_opts = [{"label": "🌐 Tous", "value": "all"}] + market_opts
-
     app.layout = html.Div([
         topbar,
-        # Filtres
-        html.Div([
-            dbc.Row([
-                dbc.Col([
-                    html.Div("MARCHÉ", style={
-                        "fontSize": 10, "fontWeight": 700, "letterSpacing": "2px",
-                        "color": T3, "marginBottom": 8,
-                    }),
-                    dbc.RadioItems(
-                        id=f"market-{slug}",
-                        options=market_opts,
-                        value="all",
-                        inline=True,
-                        className="dash-radioitems",
-                        style={"color": T2, "fontSize": 13},
-                    ),
-                ], width=12),
-            ]),
-        ], style={"background": BG3, "border": f"1px solid {BD}",
-                  "borderRadius": 12, "padding": "18px 24px", "margin": "20px 24px 0"}),
-
-        # Hero KPI
+        html.Div([dbc.Row([dbc.Col([
+            html.Div("MARCHÉ", style={"fontSize": 10, "fontWeight": 700,
+                                       "letterSpacing": "2px", "color": T3, "marginBottom": 8}),
+            dbc.RadioItems(id=f"market-{slug}", options=market_opts, value="all",
+                           inline=True, style={"color": T2, "fontSize": 13}),
+        ], width=12)])], style={"background": BG3, "border": f"1px solid {BD}",
+            "borderRadius": 12, "padding": "18px 24px", "margin": "20px 24px 0"}),
         html.Div(id=f"hero-{slug}", style={"padding": "16px 24px 0"}),
-
-        # Tabs
-        dbc.Tabs([
-            dbc.Tab(label="CLASSEMENT & ÉVOLUTION", tab_id="ranking",
-                    label_style={"fontSize": 11, "fontWeight": 700,
-                                 "letterSpacing": "1px", "color": T3},
-                    active_label_style={"color": C1}),
-            dbc.Tab(label="ANALYSE PAR PROMPT", tab_id="prompts",
-                    label_style={"fontSize": 11, "fontWeight": 700,
-                                 "letterSpacing": "1px", "color": T3},
-                    active_label_style={"color": C1}),
-            dbc.Tab(label="BIBLIOTHÈQUE PROMPTS", tab_id="library",
-                    label_style={"fontSize": 11, "fontWeight": 700,
-                                 "letterSpacing": "1px", "color": T3},
-                    active_label_style={"color": C1}),
-        ], id=f"tabs-{slug}", active_tab="ranking",
-           style={"margin": "20px 24px 0",
-                  "borderBottom": f"1px solid {BD}"}),
-
+        dbc.Tabs(tabs_list, id=f"tabs-{slug}", active_tab="ranking",
+                 style={"margin": "20px 24px 0", "borderBottom": f"1px solid {BD}"}),
         html.Div(id=f"content-{slug}", style={"padding": "16px 24px 24px"}),
-
-        # Footer moat
         html.Div([
-            html.Span("✓ Prompt library verticale · Données propriétaires · "
-                      "Historique indépendant de votre agence",
-                      style={"fontSize": 11, "color": T3}),
-            html.A("Voxa GEO Intelligence · luc@sharper-media.com",
-                   href="mailto:luc@sharper-media.com",
-                   style={"fontSize": 11, "color": C1, "textDecoration": "none"}),
-        ], className="voxa-footer"),
-    ], style={"background": BG, "minHeight": "100vh", "fontFamily": T.FONT_BODY})
+            html.Span("✓ Prompt library verticale · données propriétaires · historique indépendant"),
+            html.Span(["Voxa GEO Intelligence · ",
+                html.A("luc@sharper-media.com", href="mailto:luc@sharper-media.com",
+                       style={"color": C1, "textDecoration": "none"})]),
+        ], style={"background": f"rgba(0,229,255,0.03)", "borderTop": f"1px solid {BD}",
+                  "padding": "12px 32px", "fontSize": 11, "color": T3,
+                  "display": "flex", "justifyContent": "space-between", "fontFamily": FONT_BODY}),
+    ])
 
-    # ── Callbacks ─────────────────────────────
-
-    @app.callback(
-        Output(f"hero-{slug}", "children"),
-        Input(f"market-{slug}", "value"),
-    )
+    # ── Hero KPI ──────────────────────────────
+    @app.callback(Output(f"hero-{slug}", "children"), Input(f"market-{slug}", "value"))
     def update_hero(market):
         lang = None if market == "all" else market
-        df   = load_scores(db_path, lang)
+        df = load_scores(db_path, lang)
         hist = load_history(db_path, brand)
-        last = load_last_run_date(db_path)
-        nss  = load_nss(db_path, brand, lang)
-
-        primary = df[df["is_primary"] == 1] if not df.empty else pd.DataFrame()
-        score_v = round(primary["score"].iloc[0]) if not primary.empty else 0
-        n_prompts = "—"
-        try:
-            conn = _conn(db_path); n_prompts = conn.execute("SELECT COUNT(*) as n FROM prompts").fetchone()["n"]; conn.close()
-        except: pass
-
-        sc_col = score_color(score_v)
-        sc_lbl = score_label(score_v)
+        nss = load_nss(db_path, brand, lang)
+        primary = df[df["name"] == brand] if not df.empty else pd.DataFrame()
+        sc_val = round(primary["score"].iloc[0]) if not primary.empty else 0
         nss_col = NG if nss >= 0 else RED
-        flag   = LANG_FLAGS.get(market, "🌐")
-        mkt_label = f"{flag} {market.upper()}" if market != "all" else "🌐 TOUS MARCHÉS"
-
-        return html.Div([
-            dbc.Row([
+        return card([dbc.Row([
+            dbc.Col([
+                html.Div(str(sc_val), style={"fontSize": 52, "fontWeight": 900,
+                    "color": score_color(sc_val), "lineHeight": "1"}),
+                html.Div("/100", style={"fontSize": 14, "color": T3, "fontWeight": 600}),
+                html.Div(score_label(sc_val), style={"fontSize": 12, "fontWeight": 700,
+                    "color": score_color(sc_val), "marginTop": 4}),
+                html.Div(f"GEO Score · {brand}", style={"fontSize": 10, "fontWeight": 700,
+                    "letterSpacing": "2px", "color": T3, "marginTop": 8, "textTransform": "uppercase"}),
+            ], width=3),
+            dbc.Col([dbc.Row([
                 dbc.Col([
-                    # Gauge mini
-                    dcc.Graph(
-                        figure=go.Figure(go.Indicator(
-                            mode="gauge+number",
-                            value=score_v,
-                            number={"font": {"size": 42, "color": sc_col,
-                                             "family": T.FONT_BODY},
-                                    "suffix": "/100"},
-                            gauge={
-                                "axis": {"range": [0, 100], "tickfont": {"size": 0}},
-                                "bar": {"color": sc_col, "thickness": 0.25},
-                                "bgcolor": BG3,
-                                "borderwidth": 0,
-                                "steps": [
-                                    {"range": [0, 45],  "color": f"rgba(255,75,110,0.1)"},
-                                    {"range": [45, 70], "color": f"rgba(0,229,255,0.1)"},
-                                    {"range": [70, 100],"color": f"rgba(0,255,170,0.1)"},
-                                ],
-                            }
-                        )).update_layout(
-                            height=130, margin=dict(l=10, r=10, t=10, b=10),
-                            paper_bgcolor="transparent", plot_bgcolor="transparent",
-                            font={"family": T.FONT_BODY},
-                        ),
-                        config={"displayModeBar": False},
-                        style={"height": 130},
-                    ),
-                ], width=3),
+                    html.Div(f"{nss:+d}%", style={"fontSize": 22, "fontWeight": 800, "color": nss_col}),
+                    html.Div("NET SENTIMENT", style={"fontSize": 10, "color": T3, "fontWeight": 700, "letterSpacing": "1px"}),
+                ], width=4),
                 dbc.Col([
-                    html.Div(mkt_label, style={
-                        "fontSize": 10, "fontWeight": 700, "letterSpacing": "2px",
-                        "color": T3, "marginBottom": 6,
-                    }),
-                    html.Div(sc_lbl, style={
-                        "fontSize": 22, "fontWeight": 800, "color": sc_col,
-                        "marginBottom": 4,
-                    }),
-                    html.Div(f"Mesuré sur {n_prompts} prompts · {last}", style={
-                        "fontSize": 12, "color": T3, "marginBottom": 16,
-                    }),
-                    dbc.Row([
-                        dbc.Col([
-                            html.Div(f"{nss:+d}%", style={
-                                "fontSize": 22, "fontWeight": 800, "color": nss_col,
-                            }),
-                            html.Div("NET SENTIMENT", style={
-                                "fontSize": 10, "color": T3, "fontWeight": 700,
-                                "letterSpacing": "1px",
-                            }),
-                        ], width=4),
-                        dbc.Col([
-                            html.Div(str(len(hist)), style={
-                                "fontSize": 22, "fontWeight": 800, "color": C1,
-                            }),
-                            html.Div("RUNS", style={
-                                "fontSize": 10, "color": T3, "fontWeight": 700,
-                                "letterSpacing": "1px",
-                            }),
-                        ], width=4),
-                        dbc.Col([
-                            html.Div(str(round(primary["mention_rate"].iloc[0] * 100)) + "%"
-                                     if not primary.empty else "—", style={
-                                "fontSize": 22, "fontWeight": 800, "color": C1,
-                            }),
-                            html.Div("MENTIONS", style={
-                                "fontSize": 10, "color": T3, "fontWeight": 700,
-                                "letterSpacing": "1px",
-                            }),
-                        ], width=4),
-                    ]),
-                ], width=9),
-            ]),
-        ], style={**card_style(), "marginBottom": 0})
+                    html.Div(str(len(hist)), style={"fontSize": 22, "fontWeight": 800, "color": C1}),
+                    html.Div("RUNS", style={"fontSize": 10, "color": T3, "fontWeight": 700, "letterSpacing": "1px"}),
+                ], width=4),
+                dbc.Col([
+                    html.Div(str(round(primary["mention_rate"].iloc[0]*100))+"%"
+                             if not primary.empty else "—",
+                             style={"fontSize": 22, "fontWeight": 800, "color": C1}),
+                    html.Div("MENTIONS", style={"fontSize": 10, "color": T3, "fontWeight": 700, "letterSpacing": "1px"}),
+                ], width=4),
+            ])], width=9),
+        ])], {"marginBottom": 0})
 
-    @app.callback(
-        Output(f"content-{slug}", "children"),
-        Input(f"tabs-{slug}", "active_tab"),
-        Input(f"market-{slug}", "value"),
-    )
+    # ── Tab routing ───────────────────────────
+    @app.callback(Output(f"content-{slug}", "children"),
+                  Input(f"tabs-{slug}", "active_tab"), Input(f"market-{slug}", "value"))
     def update_content(tab, market):
         lang = None if market == "all" else market
-
-        if tab == "ranking":
-            return _tab_ranking(lang)
-        elif tab == "prompts":
-            return _tab_prompts(lang)
-        elif tab == "library":
-            return _tab_library(lang)
+        if tab == "ranking":  return _tab_ranking(lang)
+        if tab == "insights": return _tab_insights(lang)
+        if tab == "overview": return _tab_overview()
+        if tab == "prompts":  return _tab_prompts(lang)
+        if tab == "library":  return _tab_library(lang)
         return html.Div()
 
+    # ── TAB: Classement ───────────────────────
     def _tab_ranking(lang):
-        df   = load_scores(db_path, lang)
+        df = load_scores(db_path, lang)
         hist = load_history(db_path, brand)
-
-        # Bar chart concurrents
         if not df.empty:
             colors = [C1 if row["is_primary"] else T3 for _, row in df.iterrows()]
-            bar_fig = go.Figure(go.Bar(
-                x=df["score"].round().astype(int),
-                y=df["name"],
-                orientation="h",
-                marker_color=colors,
-                text=df["score"].round().astype(int).astype(str) + "/100",
-                textposition="auto",
-                textfont={"size": 12, "color": BG, "family": T.FONT_BODY},
-            )).update_layout(
-                height=max(200, len(df) * 40),
-                margin=dict(l=0, r=10, t=0, b=0),
-                paper_bgcolor="transparent", plot_bgcolor="transparent",
-                xaxis=dict(showgrid=False, range=[0, 100], tickfont={"size": 0},
-                           zeroline=False),
-                yaxis=dict(tickfont={"size": 12, "color": T2,
-                                     "family": T.FONT_BODY}),
-                font={"family": T.FONT_BODY},
-                showlegend=False,
-            )
-            bar_card = card([
-                ctitle("CLASSEMENT CONCURRENTS"),
-                dcc.Graph(figure=bar_fig, config={"displayModeBar": False}),
-            ])
+            bar = go.Figure(go.Bar(x=df["score"].round().astype(int), y=df["name"],
+                orientation="h", marker_color=colors,
+                text=df["score"].round().astype(int).astype(str)+"/100", textposition="auto",
+                textfont={"size": 12, "color": BG, "family": FONT_BODY},
+            )).update_layout(height=max(200, len(df)*40), margin=dict(l=0,r=10,t=0,b=0),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(showgrid=False, range=[0,100], showticklabels=False, zeroline=False),
+                yaxis=dict(tickfont={"size":12, "color":T2, "family":FONT_BODY}),
+                font={"family":FONT_BODY}, showlegend=False)
+            bar_c = card([ctitle("CLASSEMENT CONCURRENTS"),
+                          dcc.Graph(figure=bar, config={"displayModeBar": False})])
         else:
-            bar_card = card([ctitle("CLASSEMENT CONCURRENTS"),
-                             html.Div("Pas encore de données live.", style={"color": T3, "fontSize": 12})])
+            bar_c = card([ctitle("CLASSEMENT"), html.Div("Pas de données.", style={"color":T3,"fontSize":12})])
 
-        # Évolution
         if hist and len(hist) > 1:
-            line_fig = go.Figure(go.Scatter(
-                x=[h["run_date"] for h in hist],
-                y=[round(h["score"]) for h in hist],
-                mode="lines+markers",
-                line=dict(color=C1, width=2),
-                marker=dict(color=C1, size=6),
-                fill="tozeroy",
-                fillcolor=f"rgba(0,229,255,0.06)",
-                hovertemplate="%{y}/100<extra></extra>",
-            )).update_layout(
-                height=200,
-                margin=dict(l=0, r=10, t=0, b=0),
-                paper_bgcolor="transparent", plot_bgcolor="transparent",
-                xaxis=dict(showgrid=False, tickfont={"size": 10, "color": T3,
-                                                      "family": T.FONT_BODY}),
-                yaxis=dict(range=[0, 100], showgrid=True,
-                           gridcolor=f"rgba(255,255,255,0.04)",
-                           tickfont={"size": 10, "color": T3}),
-                font={"family": T.FONT_BODY},
-            )
-            line_card = card([
-                ctitle(f"ÉVOLUTION GEO SCORE · {brand.upper()}"),
-                dcc.Graph(figure=line_fig, config={"displayModeBar": False}),
-            ])
+            line = go.Figure(go.Scatter(
+                x=[h["run_date"] for h in hist], y=[round(h["score"]) for h in hist],
+                mode="lines+markers", line=dict(color=C1,width=2), marker=dict(color=C1,size=6),
+                fill="tozeroy", fillcolor="rgba(0,229,255,0.06)", hovertemplate="%{y}/100<extra></extra>",
+            )).update_layout(height=200, margin=dict(l=0,r=10,t=0,b=0),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(showgrid=False, tickfont={"size":10,"color":T3,"family":FONT_BODY}),
+                yaxis=dict(range=[0,100], showgrid=True, gridcolor="rgba(255,255,255,0.04)",
+                           tickfont={"size":10,"color":T3}), font={"family":FONT_BODY})
+            line_c = card([ctitle(f"ÉVOLUTION · {brand.upper()}"),
+                           dcc.Graph(figure=line, config={"displayModeBar": False})])
         else:
-            line_card = card([
-                ctitle(f"ÉVOLUTION GEO SCORE · {brand.upper()}"),
-                html.Div("Données insuffisantes — premier run en cours.",
-                         style={"color": T3, "fontSize": 12}),
-            ])
+            line_c = card([ctitle(f"ÉVOLUTION · {brand.upper()}"),
+                           html.Div("Données insuffisantes.", style={"color":T3,"fontSize":12})])
+        return dbc.Row([dbc.Col(bar_c, width=6), dbc.Col(line_c, width=6)], style={"marginTop":16})
 
-        return dbc.Row([
-            dbc.Col(bar_card, width=6),
-            dbc.Col(line_card, width=6),
-        ], style={"marginTop": 16})
+    # ── TAB: Insights ─────────────────────────
+    def _tab_insights(lang):
+        PS = {
+            "haute":   {"border": RED, "bg": "rgba(255,75,110,0.06)",
+                        "bbg": "rgba(255,75,110,0.12)", "bcol": RED},
+            "moyenne": {"border": C1,  "bg": "rgba(0,229,255,0.04)",
+                        "bbg": "rgba(0,229,255,0.10)",  "bcol": C1},
+            "info":    {"border": NG,  "bg": "rgba(0,255,170,0.04)",
+                        "bbg": "rgba(0,255,170,0.10)",  "bcol": NG},
+        }
+        def reco_ui(icon, prio, title, body_t, impact=None, prompt_t=None):
+            ps = PS.get(prio, PS["info"])
+            return html.Div([
+                html.Div([
+                    html.Span(icon, style={"fontSize":15,"marginRight":8}),
+                    html.Span(prio.upper(), style={"fontSize":9,"fontWeight":800,"letterSpacing":"1.5px",
+                        "padding":"2px 8px","borderRadius":20,"background":ps["bbg"],"color":ps["bcol"],
+                        "marginRight":10,"fontFamily":FONT_BODY}),
+                    html.Span(title, style={"fontSize":13,"fontWeight":700,"color":W,"fontFamily":FONT_BODY}),
+                    *([html.Span(f"+{impact:.0f} pts", style={"fontSize":10,"color":T3,"marginLeft":10})] if impact else []),
+                ], style={"marginBottom":6}),
+                html.Div(body_t, style={"fontSize":12,"color":T2,"lineHeight":"1.7","paddingLeft":22,"fontFamily":FONT_BODY}),
+                *([html.Div(f"Prompt : « {prompt_t[:80]}… »", style={"fontSize":10,"color":T3,"paddingLeft":22,"marginTop":4,"fontStyle":"italic"})] if prompt_t else []),
+            ], style={"borderLeft":f"3px solid {ps['border']}","background":ps["bg"],
+                      "borderRadius":"0 10px 10px 0","padding":"12px 18px","marginBottom":10})
 
+        recos = generate_recommendations(db_path, brand, vertical, lang, CAT_LABELS)
+        reco_cards = [reco_ui(r.get("icon","💡"), r["priority"], r["title"], r["body"]) for r in recos]
+
+        alert_block = db_block = html.Div()
+        try:
+            import voxa_db as vdb
+            db_alerts = vdb.get_alerts(slug, unread_only=True)
+            db_recos = vdb.get_recommendations(slug)
+            SS = {"critical":{"i":"⚠","b":RED,"bg":"rgba(255,75,110,0.06)"},
+                  "warning":{"i":"◎","b":C1,"bg":"rgba(0,229,255,0.04)"},
+                  "info":{"i":"✓","b":NG,"bg":"rgba(0,255,170,0.04)"}}
+            if db_alerts:
+                aitems = []
+                for a in db_alerts:
+                    ss = SS.get(a.get("severity","info"), SS["info"])
+                    aitems.append(html.Div([
+                        html.Div([html.Span(ss["i"], style={"marginRight":8,"fontSize":12,"color":ss["b"],"fontWeight":800}),
+                                  html.Span(a["title"], style={"fontWeight":700,"color":W,"fontSize":13}),
+                                  html.Span(f"  {a['created_at'][:10]}", style={"fontSize":10,"color":T3,"marginLeft":10})],
+                                 style={"marginBottom":3}),
+                        html.Div(a["body"], style={"fontSize":12,"color":T2,"paddingLeft":20,"lineHeight":1.5}),
+                    ], style={"padding":"10px 14px","marginBottom":8,"background":ss["bg"],
+                              "borderRadius":8,"borderLeft":f"3px solid {ss['b']}"}))
+                alert_block = card([ctitle("ALERTES ACTIVES"), *aitems], {"marginBottom":16})
+            if db_recos:
+                pm = {"high":"haute","medium":"moyenne","low":"info"}
+                dcards = [reco_ui("💡", pm.get(r.get("priority"),"moyenne"), r.get("title",""),
+                                  r.get("body",""), impact=r.get("impact_score"), prompt_t=r.get("prompt_text"))
+                          for r in db_recos]
+                db_block = card([ctitle("RECOMMANDATIONS GEO — ACTIONS PRIORITAIRES"), *dcards,
+                    html.Div("Générées après chaque run tracker.", style={"fontSize":11,"color":T3,"marginTop":8,"fontStyle":"italic"})],
+                    {"marginBottom":16})
+        except Exception:
+            pass
+
+        gap_section = html.Div("Données insuffisantes.", style={"color":T3,"fontSize":12,"padding":"12px 0"})
+        gap_df = load_gap_analysis(db_path, lang)
+        if not gap_df.empty:
+            cat_cols = [c for c in gap_df.columns if c in CAT_LABELS]
+            brand_sc = gap_df.loc[brand] if brand in gap_df.index else pd.Series()
+            hdr = [html.Th("", style={"width":130,"padding":"8px 12px"})] + [
+                html.Th(CAT_LABELS.get(c,c), style={"fontSize":10,"fontWeight":700,"textTransform":"uppercase",
+                    "letterSpacing":"1px","color":T3,"textAlign":"center","padding":"8px 12px","background":BG})
+                for c in cat_cols]
+            rows = []
+            for b in gap_df.index:
+                is_p = (b == brand)
+                cells = [html.Td(b, style={"fontWeight":800 if is_p else 600,"fontSize":13,
+                    "color":C1 if is_p else W,"padding":"10px 12px",
+                    "background":"rgba(0,229,255,0.04)" if is_p else BG3})]
+                for c in cat_cols:
+                    val = int(gap_df.loc[b,c]) if c in gap_df.columns else 0
+                    if is_p: bg_c, col = "rgba(0,229,255,0.08)", C1
+                    else:
+                        d = val - (int(brand_sc[c]) if c in brand_sc.index else 0)
+                        if d > 10: bg_c, col = "rgba(255,75,110,0.08)", RED
+                        elif d < -10: bg_c, col = "rgba(0,255,170,0.08)", NG
+                        else: bg_c, col = BG3, T2
+                    cells.append(html.Td(str(val), style={"textAlign":"center","fontSize":14,
+                        "fontWeight":800 if is_p else 600,"color":col,"background":bg_c,"padding":"10px 12px"}))
+                rows.append(html.Tr(cells, style={"borderBottom":f"1px solid {BD}"}))
+            gap_section = dbc.Table([html.Thead(html.Tr(hdr), style={"borderBottom":f"2px solid {BD}"}),
+                                     html.Tbody(rows)], bordered=False, hover=False, style={"fontFamily":FONT_BODY})
+
+        mkt_lbl = lang.upper() if lang else "TOUS MARCHÉS"
+        return html.Div([alert_block,
+            card([ctitle(f"RECOMMANDATIONS · {mkt_lbl}"), *(reco_cards or [
+                html.Div("Aucune recommandation critique.", style={"color":T3,"fontSize":12})])], {"marginBottom":16}),
+            db_block,
+            card([ctitle(f"GAP ANALYSIS · {brand.upper()} VS CONCURRENTS"),
+                html.Div([
+                    html.Span("",style={"display":"inline-block","width":8,"height":8,"borderRadius":3,
+                        "background":"rgba(0,255,170,0.4)","marginRight":4}),
+                    html.Span(f"{brand} devant",style={"fontSize":10,"color":NG,"marginRight":16}),
+                    html.Span("",style={"display":"inline-block","width":8,"height":8,"borderRadius":3,
+                        "background":"rgba(255,75,110,0.4)","marginRight":4}),
+                    html.Span("Concurrent devant",style={"fontSize":10,"color":RED}),
+                ], style={"marginBottom":12}),
+                gap_section])])
+
+    # ── TAB: Multi-Marchés ────────────────────
+    def _tab_overview():
+        mcards = []
+        for mkt in markets_from_db:
+            df = load_scores(db_path, mkt)
+            pr = df[df["name"] == brand] if not df.empty else pd.DataFrame()
+            sc = round(pr["score"].iloc[0]) if not pr.empty else 0
+            rank = df.index.get_loc(pr.index[0]) + 1 if not pr.empty else "—"
+            mcards.append(html.Div([
+                html.Div(LANG_FLAGS.get(mkt,"🌐"), style={"fontSize":24,"marginBottom":6}),
+                html.Div(str(sc), style={"fontSize":36,"fontWeight":800,"color":score_color(sc),"lineHeight":"1"}),
+                html.Div("/100", style={"fontSize":10,"color":T3}),
+                html.Div(mkt.upper(), style={"fontSize":11,"fontWeight":700,"color":T2,"marginTop":4}),
+                html.Div(f"#{rank}/{len(df)}", style={"fontSize":10,"color":T3,"marginTop":2}),
+            ], style={"border":f"1px solid {BD}","borderRadius":12,"padding":"20px","textAlign":"center","flex":1}))
+        return card([ctitle(f"GEO SCORE {brand.upper()} · {len(markets_from_db)} MARCHÉS"),
+                     html.Div(mcards, style={"display":"flex","gap":16,"flexWrap":"wrap"})], {"marginTop":16})
+
+    # ── TAB: Prompts ──────────────────────────
     def _tab_prompts(lang):
         prompts = load_prompts(db_path, brand, lang, limit=30)
         if not prompts:
-            return card([html.Div("Pas encore de données.", style={"color": T3, "fontSize": 12})])
-
+            return card([html.Div("Pas de données.", style={"color":T3,"fontSize":12})])
         rows = []
         for p in prompts:
-            sc = round(p["score"])
-            col = score_color(sc)
+            sc = round(p["score"]); col = score_color(sc)
             rows.append(html.Tr([
-                html.Td(html.Span(CAT_LABELS.get(p["category"], p["category"]),
-                                  style={**badge_style(col), "fontSize": 10}),
-                        style={"padding": "10px 12px"}),
-                html.Td(LANG_FLAGS.get(p["language"], ""), style={"padding": "10px 8px", "fontSize": 14}),
-                html.Td(p["text"], style={"padding": "10px 12px", "fontSize": 12, "color": T2}),
-                html.Td(str(sc), style={"padding": "10px 12px", "fontWeight": 800,
-                                        "color": col, "fontSize": 14, "textAlign": "center"}),
-            ], style={"borderBottom": f"1px solid {BD}"}))
+                html.Td(html.Span(CAT_LABELS.get(p["category"],p["category"]),
+                    style={**badge_style(col),"fontSize":10}), style={"padding":"10px 12px"}),
+                html.Td(LANG_FLAGS.get(p["language"],""), style={"padding":"10px 8px","fontSize":14}),
+                html.Td(p["text"], style={"padding":"10px 12px","fontSize":12,"color":T2}),
+                html.Td(str(sc), style={"padding":"10px 12px","fontWeight":800,"color":col,"fontSize":14,"textAlign":"center"}),
+            ], style={"borderBottom":f"1px solid {BD}"}))
+        return card([ctitle("ANALYSE PAR PROMPT — du plus faible au plus fort"),
+            dbc.Table([html.Thead(html.Tr([
+                *[html.Th(h, style={"fontSize":10,"fontWeight":700,"letterSpacing":"1.5px",
+                    "textTransform":"uppercase","color":T3,"padding":"8px 12px","background":BG})
+                  for h in ["Catégorie","","Prompt","Score"]]]),
+                style={"borderBottom":f"2px solid {BD}"}),
+                html.Tbody(rows)], bordered=False, hover=False, style={"fontFamily":FONT_BODY})
+        ], {"marginTop":16})
 
-        return card([
-            ctitle("ANALYSE PAR PROMPT — du plus faible au plus fort"),
-            dbc.Table([
-                html.Thead(html.Tr([
-                    *[html.Th(h, style={
-                        "fontSize": 10, "fontWeight": 700, "letterSpacing": "1.5px",
-                        "textTransform": "uppercase", "color": T3,
-                        "padding": "8px 12px", "background": BG,
-                    }) for h in ["Catégorie", "", "Prompt", "Score"]],
-                ]), style={"borderBottom": f"2px solid {BD}"}),
-                html.Tbody(rows),
-            ], bordered=False, hover=False,
-               style={"fontFamily": T.FONT_BODY}),
-        ], {"marginTop": 16})
-
+    # ── TAB: Bibliothèque ─────────────────────
     def _tab_library(lang):
         prompts = load_prompts(db_path, brand, lang, limit=50)
         if not prompts:
-            return card([html.Div("Pas encore de données.", style={"color": T3, "fontSize": 12})])
-
+            return card([html.Div("Pas de données.", style={"color":T3,"fontSize":12})])
         cats = {}
         for p in prompts:
-            c = CAT_LABELS.get(p["category"], p["category"])
-            cats.setdefault(c, []).append(p)
-
+            cats.setdefault(CAT_LABELS.get(p["category"],p["category"]), []).append(p)
         blocks = []
         for cat, ps in cats.items():
             items = [html.Li(f"{LANG_FLAGS.get(p['language'],'')} {p['text']}",
-                             style={"fontSize": 12, "color": T2, "marginBottom": 6,
-                                    "listStyle": "none", "paddingLeft": 8,
-                                    "borderLeft": f"2px solid {score_color(round(p['score']))}"})
-                     for p in ps]
+                style={"fontSize":12,"color":T2,"marginBottom":6,"listStyle":"none","paddingLeft":8,
+                       "borderLeft":f"2px solid {score_color(round(p['score']))}"}) for p in ps]
             blocks.append(html.Div([
-                html.Div(cat.upper(), style={
-                    "fontSize": 10, "fontWeight": 700, "color": T3,
-                    "letterSpacing": "2px", "marginBottom": 10,
-                }),
-                html.Ul(items, style={"padding": 0, "margin": 0}),
-            ], style={"marginBottom": 20}))
+                html.Div(cat.upper(), style={"fontSize":10,"fontWeight":700,"color":T3,"letterSpacing":"2px","marginBottom":10}),
+                html.Ul(items, style={"padding":0,"margin":0})], style={"marginBottom":20}))
+        return card([ctitle("BIBLIOTHÈQUE PROMPTS"), *blocks], {"marginTop":16})
 
-        return card([ctitle("BIBLIOTHÈQUE PROMPTS"), *blocks], {"marginTop": 16})
+    # ── Export CSV ────────────────────────────
+    @app.server.route(f"/export/csv")
+    def export_csv():
+        from flask import request, Response
+        import io, csv
+        lang = request.args.get("market") or request.args.get("lang")
+        df = load_scores(db_path, lang)
+        if df.empty:
+            return Response("Pas de données", mimetype="text/plain")
+        out = io.StringIO()
+        w = csv.writer(out)
+        w.writerow(["Marque","Score","Mention%","Fréquence","Primaire"])
+        for _, r in df.iterrows():
+            w.writerow([r["name"], round(r["score"]), round(r.get("mention_rate",0)*100),
+                        round(r.get("freq",0),1), bool(r["is_primary"])])
+        return Response(out.getvalue(), mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment;filename=voxa_{slug}_{lang or 'all'}_{date.today()}.csv"})
 
     return app
 
 
 # ─────────────────────────────────────────────
-# WSGI FACTORY — expose un server par slug
-# ─────────────────────────────────────────────
-
-def get_server(slug: str):
-    """Retourne le Flask server de l'app Dash pour un slug donné."""
-    return make_dashboard(slug).server
-
-
-# ─────────────────────────────────────────────
-# CLI — test local
+# CLI
 # ─────────────────────────────────────────────
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Voxa Dashboard Générique")
-    parser.add_argument("--config", required=True, help="Chemin vers configs/{slug}.json")
+    import argparse
+    parser = argparse.ArgumentParser(description="Voxa Dashboard Générique v2")
+    parser.add_argument("--slug", required=True)
     parser.add_argument("--port", type=int, default=8051)
     args = parser.parse_args()
-
-    import re
-    slug = re.sub(r'[^a-z0-9_-]', '', Path(args.config).stem)
-    app  = make_dashboard(slug)
-    print(f"\n✓ Dashboard {slug} → http://localhost:{args.port}/{slug}/\n")
-    app.run(debug=False, port=args.port)
+    app = make_dashboard(args.slug, standalone=True)
+    print(f"\n✓ Dashboard {args.slug} → http://localhost:{args.port}/\n")
+    app.run(debug=True, port=args.port)

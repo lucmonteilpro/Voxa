@@ -1,0 +1,11 @@
+{
+    "slug": "psg",
+    "client_name": "PSG",
+    "primary_brand": "PSG",
+    "vertical": "sport",
+    "markets": ["fr", "en"],
+    "competitors": {
+      "fr": ["OM", "Monaco", "OL", "Stade Rennais", "RC Lens", "LOSC"],
+      "en": ["Real Madrid", "Barcelona", "Manchester City", "Bayern Munich", "Arsenal", "Liverpool"]
+    }
+  }

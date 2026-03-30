@@ -1,0 +1,13 @@
+{
+    "slug": "betclic",
+    "client_name": "Betclic",
+    "primary_brand": "Betclic",
+    "vertical": "bet",
+    "markets": ["fr", "pt", "fr-ci", "pl"],
+    "competitors": {
+      "fr": ["Winamax", "FDJ", "PMU", "Unibet", "Bet365", "Parions Sport"],
+      "pt": ["Bet365", "Betway", "Solverde", "Casino Portugal", "Placard", "Bwin"],
+      "fr-ci": ["1xBet", "Sportybet", "Betway", "PMU CI", "Ligabet"],
+      "pl": ["Fortuna", "STS", "Totolotek", "Betway", "Bet365", "LV BET"]
+    }
+  }

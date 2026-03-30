@@ -528,7 +528,6 @@ def make_topbar(client_name: str, vertical: str = "sport",
       right_children: liste de composants Dash additionnels (boutons, etc.)
     """
     from dash import html
-    from dash import html
 
     vert_colors = {
         "sport":    (C1, f"rgba(0,229,255,0.10)"),
