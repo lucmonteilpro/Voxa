@@ -51,6 +51,37 @@ CLIENTS_CONFIG = {
 }
 
 
+# ── Chargement dynamique des configs JSON (nouveaux clients) ──
+def _load_dynamic_configs():
+    """Charge automatiquement les configs JSON depuis configs/ et les ajoute à CLIENTS_CONFIG."""
+    config_dir = BASE_DIR / "configs"
+    if not config_dir.exists():
+        return
+    import json as _json
+    for p in config_dir.glob("*.json"):
+        try:
+            cfg = _json.load(open(p, encoding="utf-8"))
+            slug = cfg.get("slug", "")
+            if not slug or slug in CLIENTS_CONFIG:
+                continue
+            db_path = BASE_DIR / f"voxa_{slug}.db"
+            if not db_path.exists():
+                continue  # DB pas encore créée — skip
+            CLIENTS_CONFIG[slug] = {
+                "db":            db_path,
+                "name":          cfg.get("client_name", slug),
+                "full":          cfg.get("client_name", slug),
+                "vertical":      cfg.get("vertical", "sport"),
+                "primary":       cfg.get("primary_brand", slug),
+                "markets":       cfg.get("markets", ["fr"]),
+                "dashboard_url": f"/{slug}/",
+            }
+        except Exception:
+            pass
+
+_load_dynamic_configs()
+
+
 # ─────────────────────────────────────────────
 # CONNEXIONS
 # ─────────────────────────────────────────────

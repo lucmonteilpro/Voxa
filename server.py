@@ -11,6 +11,7 @@ Les apps Dash l'importent ainsi :
 """
 
 import os
+import re
 import json
 import secrets
 import threading
@@ -898,6 +899,195 @@ def demo_client(slug):
     </div>"""
 
     return pg_wide(f"Voxa · {brand} · GEO Score", body)
+
+
+@server.route("/admin/new-client", methods=["GET", "POST"])
+@login_required
+def admin_new_client():
+    """Onboarding web — crée une config JSON + lance le premier run automatiquement."""
+    if not current_user.is_admin:
+        return redirect("/settings")
+
+    msg = ""
+    if request.method == "POST":
+        slug         = re.sub(r'[^a-z0-9_-]', '', request.form.get("slug","").lower().strip())
+        client_name  = request.form.get("client_name","").strip()
+        primary      = request.form.get("primary_brand","").strip()
+        vertical     = request.form.get("vertical","sport")
+        markets_raw  = request.form.get("markets","fr").strip()
+        comps_raw    = request.form.get("competitors","").strip()
+
+        if not all([slug, client_name, primary]):
+            msg = "Slug, nom client et marque primaire sont requis."
+        else:
+            markets = [m.strip() for m in markets_raw.split(",") if m.strip()]
+            cfg = {
+                "slug":          slug,
+                "client_name":   client_name,
+                "primary_brand": primary,
+                "vertical":      vertical,
+                "markets":       markets,
+                "competitors":   {},
+            }
+            # Parser les concurrents (format: fr:Winamax,Bet365|en:Unibet)
+            if comps_raw:
+                for part in comps_raw.split("|"):
+                    if ":" in part:
+                        lang, comps_str = part.split(":", 1)
+                        cfg["competitors"][lang.strip()] = [
+                            c.strip() for c in comps_str.split(",") if c.strip()
+                        ]
+                    else:
+                        for m in markets:
+                            cfg["competitors"][m] = [
+                                c.strip() for c in comps_raw.split(",") if c.strip()
+                            ]
+                        break
+
+            # Sauvegarder la config
+            import pathlib
+            config_dir = pathlib.Path(BASE_DIR) / "configs"
+            config_dir.mkdir(exist_ok=True)
+            config_path = config_dir / f"{slug}.json"
+            with open(config_path, "w") as f:
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+            # Lancer un premier run démo en arrière-plan
+            import threading
+            def first_run():
+                try:
+                    import tracker_generic as tg
+                    tg.run_tracker(cfg, demo_mode=True)
+                    print(f"  ✓ Premier run démo terminé pour {client_name}")
+                except Exception as e:
+                    print(f"  ✗ Erreur premier run : {e}")
+            threading.Thread(target=first_run, daemon=True).start()
+
+            msg = f"ok:{slug}"
+
+    # Lister les configs existantes
+    import pathlib, json as _json
+    config_dir = pathlib.Path(BASE_DIR) / "configs"
+    config_dir.mkdir(exist_ok=True)
+    existing = []
+    for p in sorted(config_dir.glob("*.json")):
+        try:
+            c = _json.load(open(p))
+            existing.append({"slug": c.get("slug",""), "name": c.get("client_name",""),
+                             "vertical": c.get("vertical",""), "markets": c.get("markets",[])})
+        except Exception:
+            pass
+
+    existing_rows = "".join(f"""
+    <tr style="border-bottom:1px solid {BD}">
+      <td style="padding:10px 14px;font-weight:700;color:{C1}">{e['slug']}</td>
+      <td style="padding:10px 14px;color:{W}">{e['name']}</td>
+      <td style="padding:10px 14px;color:{T2}">{e['vertical']}</td>
+      <td style="padding:10px 14px;color:{T3}">{', '.join(e['markets'])}</td>
+      <td style="padding:10px 14px">
+        <a href="/demo/{e['slug']}" style="color:{C1};font-size:12px">Pitch →</a>
+      </td>
+    </tr>""" for e in existing)
+
+    success_block = ""
+    if msg.startswith("ok:"):
+        new_slug = msg[3:]
+        success_block = f"""<div class="ae ok" style="margin-bottom:20px">
+          ✓ Client créé — premier run démo en cours.
+          <a href="/demo/{new_slug}" style="color:{NG};font-weight:700;margin-left:8px">
+            Voir la page pitch →
+          </a>
+        </div>"""
+    elif msg:
+        success_block = f'<div class="ae err">{msg}</div>'
+
+    body = f"""
+    <div style="margin-bottom:28px">
+      <div class="lbl" style="margin-bottom:6px">ADMIN</div>
+      <div class="h1">Ajouter un client</div>
+      <div style="font-size:13px;color:{T3};margin-top:4px">
+        Crée la config, génère la prompt library, lance le premier run.
+      </div>
+    </div>
+
+    {success_block}
+
+    <div class="card" style="margin-bottom:24px">
+      <form method="POST" style="display:flex;flex-direction:column;gap:14px">
+        <div class="g2">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:{T3};display:block;
+                          margin-bottom:5px;letter-spacing:1px">SLUG (identifiant)</label>
+            <input name="slug" class="fi" style="margin-bottom:0"
+                   placeholder="reims, monaco, rcsa..." required>
+            <div style="font-size:10px;color:{T3};margin-top:4px">
+              Minuscules, sans espaces. Ex: stade-reims
+            </div>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:{T3};display:block;
+                          margin-bottom:5px;letter-spacing:1px">NOM CLIENT</label>
+            <input name="client_name" class="fi" style="margin-bottom:0"
+                   placeholder="Stade de Reims" required>
+          </div>
+        </div>
+        <div class="g2">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:{T3};display:block;
+                          margin-bottom:5px;letter-spacing:1px">MARQUE PRIMAIRE</label>
+            <input name="primary_brand" class="fi" style="margin-bottom:0"
+                   placeholder="Stade de Reims" required>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:{T3};display:block;
+                          margin-bottom:5px;letter-spacing:1px">VERTICALE</label>
+            <select name="vertical" class="fs" style="margin-bottom:0">
+              <option value="sport">⚽ Sport</option>
+              <option value="bet">🎰 Betting</option>
+              <option value="politics">🗳 Politics</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:{T3};display:block;
+                        margin-bottom:5px;letter-spacing:1px">MARCHÉS</label>
+          <input name="markets" class="fi" style="margin-bottom:0"
+                 value="fr" placeholder="fr, en, pt...">
+          <div style="font-size:10px;color:{T3};margin-top:4px">
+            Séparés par des virgules. Codes : fr, en, pt, pl, fr-ci
+          </div>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:{T3};display:block;
+                        margin-bottom:5px;letter-spacing:1px">CONCURRENTS</label>
+          <input name="competitors" class="fi" style="margin-bottom:0"
+                 placeholder="RC Lens, Metz, Troyes ou fr:Winamax,Bet365|pt:Betway">
+          <div style="font-size:10px;color:{T3};margin-top:4px">
+            Simple : liste séparée par virgules (même pour tous les marchés)<br>
+            Avancé : fr:Winamax,Bet365|pt:Betway,Placard
+          </div>
+        </div>
+        <button type="submit" class="btn bg2" style="margin-top:4px">
+          Créer le client et lancer le premier run →
+        </button>
+      </form>
+    </div>
+
+    <div style="margin-bottom:12px">
+      <div class="lbl">CLIENTS CONFIGURÉS ({len(existing)})</div>
+    </div>
+    <div class="card">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="border-bottom:2px solid {BD}">
+            {"".join(f'<th style="padding:8px 14px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:{T3};text-align:left">{h}</th>' for h in ["Slug","Client","Vertical","Marchés","Pitch"])}
+          </tr>
+        </thead>
+        <tbody>{existing_rows}</tbody>
+      </table>
+    </div>"""
+
+    return pg_wide("Admin · Nouveau client", body)
 
 
 @server.route("/optimize/<slug>")
