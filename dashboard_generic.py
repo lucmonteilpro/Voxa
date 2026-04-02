@@ -365,6 +365,7 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
     tabs_list = [
         dbc.Tab(label="CLASSEMENT", tab_id="ranking", label_style=tab_s, active_label_style=tab_sa),
         dbc.Tab(label="INSIGHTS", tab_id="insights", label_style=tab_s, active_label_style=tab_sa),
+        dbc.Tab(label="ACTIONS", tab_id="actions", label_style=tab_s, active_label_style=tab_sa),
     ]
     if has_multi_markets:
         tabs_list.append(dbc.Tab(label="MULTI-MARCHÉS", tab_id="overview",
@@ -443,6 +444,7 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
         lang = None if market == "all" else market
         if tab == "ranking":  return _tab_ranking(lang)
         if tab == "insights": return _tab_insights(lang)
+        if tab == "actions":  return _tab_actions()
         if tab == "overview": return _tab_overview()
         if tab == "prompts":  return _tab_prompts(lang)
         if tab == "library":  return _tab_library(lang)
@@ -590,6 +592,190 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
                     html.Span("Concurrent devant",style={"fontSize":10,"color":RED}),
                 ], style={"marginBottom":12}),
                 gap_section])])
+
+    # ── TAB: Actions (Pack Hebdo) ─────────────
+    def _tab_actions():
+        try:
+            from action_pack import get_latest_pack, get_pack_history
+        except ImportError:
+            return card([html.Div("Module action_pack non disponible.",
+                                  style={"color": T3, "fontSize": 12})])
+
+        pack = get_latest_pack(slug)
+        history = get_pack_history(slug, limit=8)
+
+        # ── Pack actuel ──
+        if not pack or not pack.get("items"):
+            pack_section = card([
+                ctitle("PACK ACTIONS HEBDO"),
+                html.Div([
+                    html.Div("Aucun pack généré cette semaine.", style={
+                        "fontSize": 13, "color": T3, "marginBottom": 12}),
+                    html.Div("Lancez la commande pour générer le premier pack :", style={
+                        "fontSize": 12, "color": T3, "marginBottom": 8}),
+                    html.Code("python3 action_pack.py --slug " + slug + " --iterate",
+                              style={"fontSize": 12, "padding": "8px 14px", "display": "block",
+                                     "background": BG, "borderRadius": 8, "color": C1}),
+                ]),
+            ], {"marginBottom": 16})
+        else:
+            week_label = pack.get("week", "")
+            items_ui = []
+            for item in pack["items"]:
+                sc_cur  = item.get("score_current", 0)
+                sc_pred = item.get("score_predicted", 0)
+                delta   = sc_pred - sc_cur
+                status  = item.get("status", "pending")
+                prompt  = item.get("prompt_text", "")
+                content = item.get("content", "")
+                jsonld  = item.get("jsonld_schema", "")
+                n_iter  = item.get("n_iterations", 1)
+                cat     = item.get("category", "")
+                lang    = item.get("language", "")
+
+                # Styles par priorité
+                if delta >= 40:
+                    border_col, bg_col, prio_label = RED, "rgba(255,75,110,0.05)", "HAUTE"
+                elif delta >= 20:
+                    border_col, bg_col, prio_label = C1, "rgba(0,229,255,0.04)", "MOYENNE"
+                else:
+                    border_col, bg_col, prio_label = NG, "rgba(0,255,170,0.04)", "INFO"
+
+                # Status badge
+                if status == "implemented":
+                    status_badge = html.Span("✓ IMPLÉMENTÉ", style={
+                        "fontSize": 9, "fontWeight": 800, "padding": "2px 8px",
+                        "borderRadius": 20, "background": "rgba(0,255,170,0.12)",
+                        "color": NG, "marginLeft": 10})
+                elif status == "measured":
+                    sc_real = item.get("score_real", 0)
+                    diff = sc_real - sc_pred
+                    diff_col = NG if diff >= -5 else RED
+                    status_badge = html.Span(f"MESURÉ : {sc_real}/100 ({diff:+d} vs prédit)", style={
+                        "fontSize": 9, "fontWeight": 800, "padding": "2px 8px",
+                        "borderRadius": 20, "background": f"rgba(0,255,170,0.12)",
+                        "color": diff_col, "marginLeft": 10})
+                else:
+                    status_badge = html.Span("EN ATTENTE", style={
+                        "fontSize": 9, "fontWeight": 800, "padding": "2px 8px",
+                        "borderRadius": 20, "background": "rgba(168,184,200,0.12)",
+                        "color": T3, "marginLeft": 10})
+
+                item_ui = html.Div([
+                    # Header : priorité + prompt + status
+                    html.Div([
+                        html.Span(prio_label, style={
+                            "fontSize": 9, "fontWeight": 800, "letterSpacing": "1.5px",
+                            "padding": "2px 8px", "borderRadius": 20,
+                            "background": f"rgba({','.join(str(int(border_col.lstrip('#')[i:i+2], 16)) for i in (0,2,4))},0.12)" if border_col.startswith("#") else bg_col,
+                            "color": border_col, "marginRight": 10, "fontFamily": FONT_BODY}),
+                        html.Span(f"[{cat}] " if cat else "", style={
+                            "fontSize": 10, "color": T3, "marginRight": 4}),
+                        html.Span(prompt[:80] + ("..." if len(prompt) > 80 else ""), style={
+                            "fontSize": 13, "fontWeight": 700, "color": W, "fontFamily": FONT_BODY}),
+                        status_badge,
+                    ], style={"marginBottom": 8}),
+
+                    # Scores
+                    html.Div([
+                        html.Span(f"Score actuel : ", style={"fontSize": 12, "color": T3}),
+                        html.Span(f"{sc_cur}/100", style={
+                            "fontSize": 14, "fontWeight": 800, "color": score_color(sc_cur), "marginRight": 16}),
+                        html.Span(" → ", style={"fontSize": 14, "color": T3, "marginRight": 16}),
+                        html.Span(f"Prédit : ", style={"fontSize": 12, "color": T3}),
+                        html.Span(f"{sc_pred}/100", style={
+                            "fontSize": 14, "fontWeight": 800, "color": score_color(sc_pred), "marginRight": 16}),
+                        html.Span(f"(+{delta})", style={
+                            "fontSize": 12, "fontWeight": 700, "color": NG}),
+                        html.Span(f" · {n_iter} itération{'s' if n_iter > 1 else ''}", style={
+                            "fontSize": 10, "color": T3, "marginLeft": 12}),
+                    ], style={"marginBottom": 10}),
+
+                    # Contenu + JSON-LD
+                    html.Details([
+                        html.Summary("Voir le contenu optimisé + JSON-LD", style={
+                            "fontSize": 12, "color": C1, "cursor": "pointer",
+                            "fontWeight": 600, "fontFamily": FONT_BODY}),
+                        html.Div([
+                            html.Div("CONTENU OPTIMISÉ", style={
+                                "fontSize": 9, "fontWeight": 700, "letterSpacing": "1.5px",
+                                "color": T3, "marginBottom": 6, "marginTop": 10}),
+                            html.Pre(content, style={
+                                "fontSize": 12, "color": T2, "lineHeight": "1.6",
+                                "background": BG, "padding": "12px 14px",
+                                "borderRadius": 8, "border": f"1px solid {BD}",
+                                "whiteSpace": "pre-wrap", "fontFamily": FONT_BODY,
+                                "maxHeight": 200, "overflowY": "auto"}),
+                            *([ html.Div([
+                                html.Div("JSON-LD (copier dans <head>)", style={
+                                    "fontSize": 9, "fontWeight": 700, "letterSpacing": "1.5px",
+                                    "color": T3, "marginBottom": 6, "marginTop": 12}),
+                                html.Pre(jsonld, style={
+                                    "fontSize": 11, "color": C1, "lineHeight": "1.4",
+                                    "background": BG, "padding": "12px 14px",
+                                    "borderRadius": 8, "border": f"1px solid rgba(0,229,255,0.2)",
+                                    "whiteSpace": "pre-wrap", "fontFamily": "'JetBrains Mono', monospace",
+                                    "maxHeight": 250, "overflowY": "auto"}),
+                            ]) ] if jsonld else []),
+                        ]),
+                    ], style={"marginTop": 4}),
+                ], style={
+                    "borderLeft": f"3px solid {border_col}", "background": bg_col,
+                    "borderRadius": "0 10px 10px 0",
+                    "padding": "14px 18px", "marginBottom": 12})
+
+                items_ui.append(item_ui)
+
+            pack_section = card([
+                ctitle(f"PACK ACTIONS · SEMAINE {week_label}"),
+                html.Div(f"Généré le {pack.get('created_at', '')[:10]} · {pack['n_items']} actions",
+                         style={"fontSize": 11, "color": T3, "marginBottom": 14}),
+                *items_ui,
+            ], {"marginBottom": 16})
+
+        # ── Historique des packs précédents ──
+        hist_section = html.Div()
+        if history and len(history) > 0:
+            hist_rows = []
+            for h in history:
+                avg_cur  = round(h.get("avg_current") or 0)
+                avg_pred = round(h.get("avg_predicted") or 0)
+                avg_real = round(h.get("avg_real") or 0) if h.get("avg_real") else "—"
+                n_impl   = h.get("n_implemented", 0)
+                n_items  = h.get("n_items", 0)
+
+                accuracy = ""
+                if isinstance(avg_real, int) and avg_pred > 0:
+                    diff = avg_real - avg_pred
+                    accuracy = f"{diff:+d}"
+
+                hist_rows.append(html.Tr([
+                    html.Td(h.get("week", ""), style={"padding": "8px 12px", "fontWeight": 700, "color": C1, "fontSize": 12}),
+                    html.Td(f"{n_impl}/{n_items}", style={"padding": "8px 12px", "color": T2, "fontSize": 12}),
+                    html.Td(str(avg_cur), style={"padding": "8px 12px", "color": score_color(avg_cur), "fontWeight": 700, "fontSize": 13}),
+                    html.Td(str(avg_pred), style={"padding": "8px 12px", "color": C1, "fontWeight": 700, "fontSize": 13}),
+                    html.Td(str(avg_real), style={"padding": "8px 12px", "color": NG if isinstance(avg_real, int) else T3, "fontWeight": 700, "fontSize": 13}),
+                    html.Td(accuracy, style={"padding": "8px 12px", "color": NG if accuracy.startswith("+") or accuracy == "" else RED, "fontWeight": 700, "fontSize": 12}),
+                ], style={"borderBottom": f"1px solid {BD}"}))
+
+            hist_section = card([
+                ctitle("HISTORIQUE DES PACKS"),
+                dbc.Table([
+                    html.Thead(html.Tr([
+                        *[html.Th(h, style={
+                            "fontSize": 10, "fontWeight": 700, "letterSpacing": "1.5px",
+                            "textTransform": "uppercase", "color": T3,
+                            "padding": "8px 12px", "background": BG})
+                          for h in ["Semaine", "Implémenté", "Avant", "Prédit", "Réel", "Δ préd."]]
+                    ]), style={"borderBottom": f"2px solid {BD}"}),
+                    html.Tbody(hist_rows),
+                ], bordered=False, hover=False, style={"fontFamily": FONT_BODY}),
+                html.Div(
+                    "Le score réel est mesuré 4 semaines après implémentation.",
+                    style={"fontSize": 11, "color": T3, "marginTop": 8, "fontStyle": "italic"}),
+            ])
+
+        return html.Div([pack_section, hist_section], style={"marginTop": 16})
 
     # ── TAB: Multi-Marchés ────────────────────
     def _tab_overview():
