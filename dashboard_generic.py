@@ -110,25 +110,28 @@ def load_scores_by_category(db_path: str, brand: str, language: str = None) -> d
     return {r["category"]: round(r["score"]) for r in rows}
 
 
-def load_history(db_path: str, brand: str, n_weeks: int = 10) -> list:
+def load_history(db_path: str, brand: str, n_weeks: int = 90, lang: str = None) -> list:
     conn = _conn(db_path)
     try:
-        rows = conn.execute("""
+        lang_where = "AND ru.language = ?" if lang else ""
+        params = [brand, lang, n_weeks] if lang else [brand, n_weeks]
+        rows = conn.execute(f"""
             SELECT ru.run_date, AVG(r.geo_score) as score
             FROM results r
             JOIN runs ru ON r.run_id = ru.id
             JOIN brands b ON r.brand_id = b.id
-            WHERE b.name = ? AND ru.is_demo = 0
+            WHERE b.name = ? AND ru.is_demo = 0 {lang_where}
             GROUP BY ru.run_date ORDER BY ru.run_date ASC LIMIT ?
-        """, (brand, n_weeks)).fetchall()
+        """, params).fetchall()
         if not rows:
-            rows = conn.execute("""
+            params_fb = [brand, lang, n_weeks] if lang else [brand, n_weeks]
+            rows = conn.execute(f"""
                 SELECT ru.run_date, AVG(r.geo_score) as score
                 FROM results r JOIN runs ru ON r.run_id = ru.id
                 JOIN brands b ON r.brand_id = b.id
-                WHERE b.name = ?
+                WHERE b.name = ? {lang_where}
                 GROUP BY ru.run_date ORDER BY ru.run_date ASC LIMIT ?
-            """, (brand, n_weeks)).fetchall()
+            """, params_fb).fetchall()
     finally:
         conn.close()
     return [dict(r) for r in rows]
@@ -406,7 +409,7 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
     def update_hero(market):
         lang = None if market == "all" else market
         df = load_scores(db_path, lang)
-        hist = load_history(db_path, brand)
+        hist = load_history(db_path, brand, lang=lang)
         nss = load_nss(db_path, brand, lang)
         primary = df[df["name"] == brand] if not df.empty else pd.DataFrame()
         sc_val = round(primary["score"].iloc[0]) if not primary.empty else 0
@@ -455,7 +458,7 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
     # ── TAB: Classement ───────────────────────
     def _tab_ranking(lang):
         df = load_scores(db_path, lang)
-        hist = load_history(db_path, brand)
+        hist = load_history(db_path, brand, lang=lang)
         if not df.empty:
             colors = [C1 if row["is_primary"] else T3 for _, row in df.iterrows()]
             bar = go.Figure(go.Bar(x=df["score"].round().astype(int), y=df["name"],
