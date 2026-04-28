@@ -320,6 +320,7 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
         "reputation": "Réputation", "transactional": "Transactionnel",
         "visibility": "Visibilité", "brand": "Image", "odds": "Cotes",
         "regulation": "Régulation", "payment": "Paiement",
+        "worldcup": "Coupe du Monde",
     }
 
     # ── App Dash ──────────────────────────────
@@ -446,7 +447,7 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
         if tab == "ranking":  return _tab_ranking(lang)
         if tab == "insights": return _tab_insights(lang)
         if tab == "actions":  return _tab_actions()
-        if tab == "overview": return _tab_overview()
+        if tab == "overview": return _tab_overview(lang)
         if tab == "prompts":  return _tab_prompts(lang)
         if tab == "library":  return _tab_library(lang)
         return html.Div()
@@ -779,17 +780,18 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
         return html.Div([pack_section, hist_section], style={"marginTop": 16})
 
     # ── TAB: Multi-Marchés ────────────────────
-    def _tab_overview():
-        # Score global
-        all_df = load_scores(db_path, None)
+    def _tab_overview(lang):
+        # Score (filtré par marché si sélectionné)
+        all_df = load_scores(db_path, lang)
         brand_row = all_df[all_df["name"] == brand] if not all_df.empty else pd.DataFrame()
         global_score = round(brand_row["score"].iloc[0]) if not brand_row.empty else 0
         global_rank = all_df.index.get_loc(brand_row.index[0]) + 1 if not brand_row.empty else "—"
         n_brands = len(all_df)
+        show_markets = [lang] if lang else markets_from_db
 
         # Score par marché
         mcards = []
-        for mkt in markets_from_db:
+        for mkt in show_markets:
             df = load_scores(db_path, mkt)
             pr = df[df["name"] == brand] if not df.empty else pd.DataFrame()
             sc = round(pr["score"].iloc[0]) if not pr.empty else 0
@@ -802,7 +804,7 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
                 html.Div(f"#{rank}/{len(df)}", style={"fontSize":10,"color":T3,"marginTop":2}),
             ], style={"border":f"1px solid {BD}","borderRadius":12,"padding":"20px","textAlign":"center","flex":1}))
 
-        # Top 5 concurrents
+        # Top concurrents
         comp_rows = []
         for i, (_, row) in enumerate(all_df.head(7).iterrows(), 1):
             is_brand = row["name"] == brand
@@ -821,12 +823,13 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
             ], style={"padding":"6px 0","borderBottom":f"1px solid {BD}" if not is_brand else f"1px solid rgba(0,229,255,0.2)",
                       "background":"rgba(0,229,255,0.04)" if is_brand else "transparent"}))
 
+        mkt_label = LANG_FLAGS.get(lang,"") + " " + (lang.upper() if lang else "TOUS MARCHÉS")
+
         return html.Div([
-            # Header : score global
             card([
                 html.Div([
                     html.Div([
-                        html.Div("GEO SCORE GLOBAL", style={"fontSize":10,"fontWeight":700,
+                        html.Div(f"GEO SCORE · {mkt_label}", style={"fontSize":10,"fontWeight":700,
                                  "letterSpacing":"2px","color":T3,"marginBottom":8}),
                         html.Div([
                             html.Span(str(global_score), style={"fontSize":52,"fontWeight":800,
@@ -839,8 +842,7 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
                     html.Div(comp_rows, style={"flex":"1","marginLeft":40}),
                 ], style={"display":"flex","alignItems":"flex-start"}),
             ], {"marginBottom":16}),
-            # Marchés
-            card([ctitle(f"SCORE PAR MARCHÉ · {len(markets_from_db)} MARCHÉS"),
+            card([ctitle(f"SCORE PAR MARCHÉ · {len(show_markets)} MARCHÉ{'S' if len(show_markets)>1 else ''}"),
                   html.Div(mcards, style={"display":"flex","gap":16,"flexWrap":"wrap"})]),
         ], style={"marginTop":16})
 

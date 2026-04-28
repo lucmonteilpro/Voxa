@@ -135,6 +135,12 @@ PROMPT_LIBRARY = {
         {"text": "Quel site de paris sportifs propose les retraits les plus rapides en France ?", "category": "payment"},
         {"text": "Quels moyens de paiement sont acceptés sur les sites de paris sportifs en France ?", "category": "payment"},
         {"text": "Quel opérateur de paris sportifs a les meilleurs délais de retrait en France ?", "category": "payment"},
+
+        # Coupe du Monde 2026
+        {"text": "Où parier sur la Coupe du Monde 2026 en France ?", "category": "worldcup"},
+        {"text": "Quel site de paris propose les meilleures cotes pour la Coupe du Monde 2026 ?", "category": "worldcup"},
+        {"text": "Meilleures cotes France Coupe du Monde 2026", "category": "worldcup"},
+        {"text": "Quel opérateur recommander pour parier sur le Mondial 2026 en France ?", "category": "worldcup"},
     ],
 
     # ── PORTUGAL ────────────────────────────
@@ -170,6 +176,11 @@ PROMPT_LIBRARY = {
         {"text": "Qual site de apostas desportivas tem os levantamentos mais rápidos em Portugal?", "category": "payment"},
         {"text": "Quais métodos de pagamento são aceites nos sites de apostas em Portugal?", "category": "payment"},
         {"text": "Qual operador de apostas tem os melhores prazos de levantamento em Portugal?", "category": "payment"},
+
+        # Copa do Mundo 2026
+        {"text": "Onde apostar no Mundial 2026 em Portugal?", "category": "worldcup"},
+        {"text": "Melhores odds Copa do Mundo 2026 em Portugal?", "category": "worldcup"},
+        {"text": "Qual site de apostas recomendas para o Mundial 2026 em Portugal?", "category": "worldcup"},
     ],
 
     # ── CÔTE D'IVOIRE ────────────────────────
@@ -205,6 +216,11 @@ PROMPT_LIBRARY = {
         {"text": "Quel site de paris sportifs accepte le paiement par mobile money en Côte d'Ivoire ?", "category": "payment"},
         {"text": "Quels sites de paris permettent des dépôts et retraits par Orange Money ou MTN Money en Côte d'Ivoire ?", "category": "payment"},
         {"text": "Quel opérateur de paris propose les retraits les plus rapides en Côte d'Ivoire ?", "category": "payment"},
+
+        # Coupe du Monde 2026
+        {"text": "Où parier sur la Coupe du Monde 2026 en Côte d'Ivoire ?", "category": "worldcup"},
+        {"text": "Quel site de paris pour les matchs de la Côte d'Ivoire au Mondial 2026 ?", "category": "worldcup"},
+        {"text": "Meilleures cotes Coupe du Monde 2026 en Côte d'Ivoire ?", "category": "worldcup"},
     ],
 
     # ── POLOGNE ──────────────────────────────
@@ -240,6 +256,11 @@ PROMPT_LIBRARY = {
         {"text": "Który serwis bukmacherski ma najszybsze wypłaty w Polsce?", "category": "payment"},
         {"text": "Jakie metody płatności są dostępne u polskich bukmacherów?", "category": "payment"},
         {"text": "Który bukmacher oferuje najlepsze warunki wypłat w Polsce?", "category": "payment"},
+
+        # Mistrzostwa Świata 2026
+        {"text": "Gdzie obstawiać Mistrzostwa Świata 2026 w Polsce?", "category": "worldcup"},
+        {"text": "Najlepsze kursy na Mundial 2026 w Polsce?", "category": "worldcup"},
+        {"text": "Który bukmacher polecasz na Mistrzostwa Świata 2026?", "category": "worldcup"},
     ],
 }
 
