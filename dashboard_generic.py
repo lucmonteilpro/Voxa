@@ -362,14 +362,15 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
 
     tab_s  = {"fontSize": 11, "fontWeight": 700, "letterSpacing": "1px", "color": T3}
     tab_sa = {"color": C1}
-    tabs_list = [
-        dbc.Tab(label="CLASSEMENT", tab_id="ranking", label_style=tab_s, active_label_style=tab_sa),
-        dbc.Tab(label="INSIGHTS", tab_id="insights", label_style=tab_s, active_label_style=tab_sa),
-        dbc.Tab(label="ACTIONS", tab_id="actions", label_style=tab_s, active_label_style=tab_sa),
-    ]
+    tabs_list = []
     if has_multi_markets:
-        tabs_list.append(dbc.Tab(label="MULTI-MARCHÉS", tab_id="overview",
+        tabs_list.append(dbc.Tab(label="VUE GÉNÉRALE", tab_id="overview",
                                  label_style=tab_s, active_label_style=tab_sa))
+    tabs_list += [
+        dbc.Tab(label="CLASSEMENT", tab_id="ranking", label_style=tab_s, active_label_style=tab_sa),
+        dbc.Tab(label="ACTIONS", tab_id="actions", label_style=tab_s, active_label_style=tab_sa),
+        dbc.Tab(label="INSIGHTS", tab_id="insights", label_style=tab_s, active_label_style=tab_sa),
+    ]
     tabs_list += [
         dbc.Tab(label="PROMPTS", tab_id="prompts", label_style=tab_s, active_label_style=tab_sa),
         dbc.Tab(label="BIBLIOTHÈQUE", tab_id="library", label_style=tab_s, active_label_style=tab_sa),
@@ -386,7 +387,7 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
         ], width=12)])], style={"background": BG3, "border": f"1px solid {BD}",
             "borderRadius": 12, "padding": "18px 24px", "margin": "20px 24px 0"}),
         html.Div(id=f"hero-{slug}", style={"padding": "16px 24px 0"}),
-        dbc.Tabs(tabs_list, id=f"tabs-{slug}", active_tab="ranking",
+        dbc.Tabs(tabs_list, id=f"tabs-{slug}", active_tab="overview" if has_multi_markets else "ranking",
                  style={"margin": "20px 24px 0", "borderBottom": f"1px solid {BD}"}),
         html.Div(id=f"content-{slug}", style={"padding": "16px 24px 24px"}),
         html.Div([
@@ -779,6 +780,14 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
 
     # ── TAB: Multi-Marchés ────────────────────
     def _tab_overview():
+        # Score global
+        all_df = load_scores(db_path, None)
+        brand_row = all_df[all_df["name"] == brand] if not all_df.empty else pd.DataFrame()
+        global_score = round(brand_row["score"].iloc[0]) if not brand_row.empty else 0
+        global_rank = all_df.index.get_loc(brand_row.index[0]) + 1 if not brand_row.empty else "—"
+        n_brands = len(all_df)
+
+        # Score par marché
         mcards = []
         for mkt in markets_from_db:
             df = load_scores(db_path, mkt)
@@ -792,8 +801,48 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
                 html.Div(mkt.upper(), style={"fontSize":11,"fontWeight":700,"color":T2,"marginTop":4}),
                 html.Div(f"#{rank}/{len(df)}", style={"fontSize":10,"color":T3,"marginTop":2}),
             ], style={"border":f"1px solid {BD}","borderRadius":12,"padding":"20px","textAlign":"center","flex":1}))
-        return card([ctitle(f"GEO SCORE {brand.upper()} · {len(markets_from_db)} MARCHÉS"),
-                     html.Div(mcards, style={"display":"flex","gap":16,"flexWrap":"wrap"})], {"marginTop":16})
+
+        # Top 5 concurrents
+        comp_rows = []
+        for i, (_, row) in enumerate(all_df.head(7).iterrows(), 1):
+            is_brand = row["name"] == brand
+            sc = round(row["score"])
+            comp_rows.append(html.Div([
+                html.Span(f"#{i}", style={"fontSize":12,"fontWeight":700,"color":C1 if is_brand else T3,
+                                          "width":30,"display":"inline-block"}),
+                html.Span(f"{'★ ' if is_brand else ''}{row['name']}", style={
+                    "fontSize":13,"fontWeight":800 if is_brand else 600,
+                    "color":C1 if is_brand else W,"width":180,"display":"inline-block"}),
+                html.Div(style={"display":"inline-block","width":f"{sc*1.5}px","height":8,
+                                "background":C1 if is_brand else "rgba(168,184,200,0.3)",
+                                "borderRadius":4,"marginRight":10,"verticalAlign":"middle"}),
+                html.Span(f"{sc}/100", style={"fontSize":13,"fontWeight":800 if is_brand else 600,
+                                              "color":score_color(sc)}),
+            ], style={"padding":"6px 0","borderBottom":f"1px solid {BD}" if not is_brand else f"1px solid rgba(0,229,255,0.2)",
+                      "background":"rgba(0,229,255,0.04)" if is_brand else "transparent"}))
+
+        return html.Div([
+            # Header : score global
+            card([
+                html.Div([
+                    html.Div([
+                        html.Div("GEO SCORE GLOBAL", style={"fontSize":10,"fontWeight":700,
+                                 "letterSpacing":"2px","color":T3,"marginBottom":8}),
+                        html.Div([
+                            html.Span(str(global_score), style={"fontSize":52,"fontWeight":800,
+                                       "color":score_color(global_score),"lineHeight":"1"}),
+                            html.Span("/100", style={"fontSize":16,"color":T3,"marginLeft":4}),
+                        ]),
+                        html.Div(f"#{global_rank} sur {n_brands} concurrents",
+                                 style={"fontSize":12,"color":T3,"marginTop":6}),
+                    ], style={"flex":"0 0 200px"}),
+                    html.Div(comp_rows, style={"flex":"1","marginLeft":40}),
+                ], style={"display":"flex","alignItems":"flex-start"}),
+            ], {"marginBottom":16}),
+            # Marchés
+            card([ctitle(f"SCORE PAR MARCHÉ · {len(markets_from_db)} MARCHÉS"),
+                  html.Div(mcards, style={"display":"flex","gap":16,"flexWrap":"wrap"})]),
+        ], style={"marginTop":16})
 
     # ── TAB: Prompts ──────────────────────────
     def _tab_prompts(lang):
