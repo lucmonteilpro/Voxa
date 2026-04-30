@@ -31,7 +31,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import dash
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, Output
+from dash import html, dcc, Input, Output, State, ALL, callback_context
 
 import theme as T
 from theme import (P, C1, C2, NG, BG, BG2, BG3, BD, BD2, W, T2, T3, RED, GRD,
@@ -368,26 +368,42 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
                                              "fontSize": 12, "fontWeight": 600, "color": T2,
                                              "textDecoration": "none"})])
 
-    # ── Tabs (transformés en sidebar via CSS class .voxa-sidebar) ──
-    tab_s = {"fontSize": 13, "fontWeight": 500, "color": T2}
-    tab_sa = {"color": "#FFFFFF", "background": C1}
-
-    tabs_list = []
-    if has_multi_markets:
-        tabs_list.append(dbc.Tab(label="Vue générale", tab_id="overview",
-                                 label_style=tab_s, active_label_style=tab_sa))
-    tabs_list += [
-        dbc.Tab(label="Classement", tab_id="ranking",
-                label_style=tab_s, active_label_style=tab_sa),
-        dbc.Tab(label="Pack Action", tab_id="actions",
-                label_style=tab_s, active_label_style=tab_sa),
-        dbc.Tab(label="Insights", tab_id="insights",
-                label_style=tab_s, active_label_style=tab_sa),
-        dbc.Tab(label="Prompts", tab_id="prompts",
-                label_style=tab_s, active_label_style=tab_sa),
-        dbc.Tab(label="Bibliothèque", tab_id="library",
-                label_style=tab_s, active_label_style=tab_sa),
+    # ── Sidebar : structure 3 sections (MONITOR / IMPROVE / DISCOVER) ──
+    # Définition de la structure sidebar : liste de (section_label, items)
+    # Chaque item : (tab_id, label) — l'ordre détermine l'affichage
+    sidebar_structure = [
+        ("MONITOR", [
+            *([("overview", "Vue générale")] if has_multi_markets else []),
+            ("ranking", "Classement"),
+            ("prompts", "Prompts"),
+        ]),
+        ("IMPROVE", [
+            ("actions", "Pack Action"),
+            ("insights", "Insights"),
+        ]),
+        ("DISCOVER", [
+            ("library", "Bibliothèque"),
+        ]),
     ]
+
+    # Tab par défaut au démarrage
+    default_tab = "overview" if has_multi_markets else "ranking"
+
+    # Construction des éléments de la sidebar
+    def _build_sidebar_items():
+        children = []
+        for section_label, items in sidebar_structure:
+            children.append(html.Div(section_label, className="voxa-nav-section"))
+            for tab_id, label in items:
+                children.append(html.Div(
+                    label,
+                    id={"type": f"nav-{slug}", "tab": tab_id},
+                    className="voxa-nav-item active" if tab_id == default_tab else "voxa-nav-item",
+                    n_clicks=0,
+                ))
+        return children
+
+    sidebar_children = _build_sidebar_items()
 
     # ── Filter bar (compact horizontal sticky) ──
     filter_bar = html.Div([
@@ -417,14 +433,13 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
 
     # ── Layout horizontal sidebar + content ──
     app.layout = html.Div([
+        # Store qui maintient le tab actif
+        dcc.Store(id=f"active-tab-{slug}", data=default_tab),
         topbar,
         filter_bar,
         html.Div([
-            # Sidebar à gauche (dbc.Tabs en mode vertical via CSS)
-            html.Div([
-                dbc.Tabs(tabs_list, id=f"tabs-{slug}",
-                         active_tab="overview" if has_multi_markets else "ranking"),
-            ], className="voxa-sidebar"),
+            # Sidebar à gauche : structure custom avec sections
+            html.Div(sidebar_children, className="voxa-sidebar"),
             # Content area à droite
             html.Div([
                 html.Div(id=f"hero-{slug}", style={"padding": "20px 28px 0"}),
@@ -477,9 +492,46 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
             ), width=3),
         ], className="g-2", style={"marginBottom": 16})
 
-    # ── Tab routing (logique inchangée) ───────
-    @app.callback(Output(f"content-{slug}", "children"),
-                  Input(f"tabs-{slug}", "active_tab"), Input(f"market-{slug}", "value"))
+    # ── Sidebar callbacks (3 callbacks pour gérer la nav custom) ──
+    # 1) Click sur un nav-item → met à jour le store active-tab
+    @app.callback(
+        Output(f"active-tab-{slug}", "data"),
+        Input({"type": f"nav-{slug}", "tab": ALL}, "n_clicks"),
+        State({"type": f"nav-{slug}", "tab": ALL}, "id"),
+        prevent_initial_call=True,
+    )
+    def _on_nav_click(n_clicks_list, ids):
+        ctx = callback_context
+        if not ctx.triggered:
+            return dash.no_update
+        # Récupérer l'item cliqué (parsing du dict-id JSON)
+        triggered_prop = ctx.triggered[0]["prop_id"]
+        if not triggered_prop or triggered_prop == ".":
+            return dash.no_update
+        # Vérifier qu'un click a vraiment eu lieu (filtre les n_clicks=None initiaux)
+        if not any(n_clicks_list):
+            return dash.no_update
+        triggered_id = json.loads(triggered_prop.split(".")[0])
+        return triggered_id["tab"]
+
+    # 2) Mise à jour de la classe CSS active sur les nav-items
+    @app.callback(
+        Output({"type": f"nav-{slug}", "tab": ALL}, "className"),
+        Input(f"active-tab-{slug}", "data"),
+        State({"type": f"nav-{slug}", "tab": ALL}, "id"),
+    )
+    def _update_active_class(active_tab, ids):
+        return [
+            "voxa-nav-item active" if id_["tab"] == active_tab else "voxa-nav-item"
+            for id_ in ids
+        ]
+
+    # 3) Routing du contenu (logique métier inchangée, l'input vient du store)
+    @app.callback(
+        Output(f"content-{slug}", "children"),
+        Input(f"active-tab-{slug}", "data"),
+        Input(f"market-{slug}", "value"),
+    )
     def update_content(tab, market):
         lang = None if market == "all" else market
         if tab == "ranking":  return _tab_ranking(lang)
