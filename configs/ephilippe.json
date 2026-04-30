@@ -1,0 +1,10 @@
+{
+  "slug": "ephilippe",
+  "client_name": "Édouard Philippe",
+  "primary_brand": "Édouard Philippe",
+  "vertical": "politics",
+  "markets": ["fr"],
+  "competitors": {
+    "fr": ["Jordan Bardella", "Marine Le Pen", "Jean-Luc Mélenchon", "Raphaël Glucksmann", "Gabriel Attal", "Bruno Retailleau"]
+  }
+}

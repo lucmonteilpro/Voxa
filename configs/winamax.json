@@ -1,0 +1,10 @@
+{
+  "slug": "winamax",
+  "client_name": "Winamax",
+  "primary_brand": "Winamax",
+  "vertical": "bet",
+  "markets": ["fr"],
+  "competitors": {
+    "fr": ["Betclic", "FDJ", "PMU", "Unibet", "Bet365", "Parions Sport"]
+  }
+}

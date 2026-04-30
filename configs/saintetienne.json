@@ -1,0 +1,11 @@
+{
+  "slug": "saintetienne",
+  "client_name": "AS Saint-Étienne",
+  "primary_brand": "AS Saint-Étienne",
+  "vertical": "sport",
+  "markets": ["fr", "en"],
+  "competitors": {
+    "fr": ["OL", "RC Lens", "Stade de Reims", "Metz", "Nantes"],
+    "en": ["OL", "RC Lens", "Stade de Reims"]
+  }
+}

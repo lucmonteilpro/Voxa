@@ -1,0 +1,11 @@
+{
+  "slug": "lehavre",
+  "client_name": "Le Havre AC",
+  "primary_brand": "Le Havre AC",
+  "vertical": "sport",
+  "markets": ["fr", "en"],
+  "competitors": {
+    "fr": ["Stade de Reims", "RC Strasbourg", "Montpellier HSC", "Nantes", "Metz"],
+    "en": ["Stade de Reims", "RC Strasbourg", "Montpellier HSC"]
+  }
+}

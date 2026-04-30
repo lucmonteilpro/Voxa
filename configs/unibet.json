@@ -1,0 +1,10 @@
+{
+  "slug": "unibet",
+  "client_name": "Unibet",
+  "primary_brand": "Unibet",
+  "vertical": "bet",
+  "markets": ["fr"],
+  "competitors": {
+    "fr": ["Betclic", "Winamax", "FDJ", "PMU", "Bet365", "Parions Sport"]
+  }
+}
