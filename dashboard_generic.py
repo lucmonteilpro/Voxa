@@ -1,8 +1,15 @@
 """
-Voxa — Dashboard Générique v2.0
+Voxa — Dashboard Générique v2.1
 ================================
 Dashboard Dash unique paramétré par config JSON.
 Remplace dashboard.py (PSG) et dashboard_betclic.py (Betclic).
+
+v2.1 (2026-04-30) — Light mode + sidebar layout :
+- Layout horizontal : sidebar gauche + content droite (au lieu de tabs horizontales)
+- 4 KPI cards séparées avec icônes colorées (au lieu d'1 hero monolithique)
+- Filter bar sticky compact horizontal
+- Couleurs / classes CSS pilotées par theme.py V2 (light mode)
+- Logique métier (callbacks, _tab_*, DB) inchangée
 
 Usage direct :
     python3 dashboard_generic.py --slug psg --port 8050
@@ -30,7 +37,7 @@ import theme as T
 from theme import (P, C1, C2, NG, BG, BG2, BG3, BD, BD2, W, T2, T3, RED, GRD,
                    FONTS_URL, DASH_CSS, score_color, score_label,
                    card_style, card_title_style, kpi_value_style, badge_style,
-                   FONT_BODY)
+                   FONT_BODY, BG_ACCENT, BG_ACCENT2, BG_OK, BG_ERR)
 
 BASE_DIR = Path(__file__).parent.resolve()
 
@@ -38,7 +45,6 @@ BASE_DIR = Path(__file__).parent.resolve()
 # ─────────────────────────────────────────────
 # DB HELPERS (génériques)
 # ─────────────────────────────────────────────
-
 def _resolve_db_path(slug: str) -> str:
     """Résout le chemin DB : d'abord voxa_db.CLIENTS_CONFIG, puis voxa_{slug}.db."""
     try:
@@ -233,23 +239,23 @@ def load_gap_analysis(db_path: str, language: str = None) -> pd.DataFrame:
 # ─────────────────────────────────────────────
 # RECOMMENDATIONS ENGINE
 # ─────────────────────────────────────────────
-
 def generate_recommendations(db_path, brand, vertical, language=None, cat_labels=None):
     recos = []
     cat_labels = cat_labels or {}
+
     cat_scores = load_scores_by_category(db_path, brand, language)
     if cat_scores:
         worst_cat = min(cat_scores, key=cat_scores.get)
-        best_cat  = max(cat_scores, key=cat_scores.get)
+        best_cat = max(cat_scores, key=cat_scores.get)
         gap = cat_scores[best_cat] - cat_scores[worst_cat]
         if gap >= 30:
             recos.append({"priority": "haute", "icon": "⚠",
-                "title": f"Écart critique : {cat_labels.get(worst_cat, worst_cat)} ({cat_scores[worst_cat]}) vs {cat_labels.get(best_cat, best_cat)} ({cat_scores[best_cat]})",
-                "body": f"Écart de {gap} pts. Enrichir le contenu éditorial et FAQ sur \"{cat_labels.get(worst_cat, worst_cat)}\"."})
+                          "title": f"Écart critique : {cat_labels.get(worst_cat, worst_cat)} ({cat_scores[worst_cat]}) vs {cat_labels.get(best_cat, best_cat)} ({cat_scores[best_cat]})",
+                          "body": f"Écart de {gap} pts. Enrichir le contenu éditorial et FAQ sur \"{cat_labels.get(worst_cat, worst_cat)}\"."})
         elif cat_scores[worst_cat] < 40:
             recos.append({"priority": "haute", "icon": "⚠",
-                "title": f"Faible score en {cat_labels.get(worst_cat, worst_cat)} : {cat_scores[worst_cat]}/100",
-                "body": f"Les LLMs ne citent quasiment pas {brand} sur ces requêtes. Angle mort à combler."})
+                          "title": f"Faible score en {cat_labels.get(worst_cat, worst_cat)} : {cat_scores[worst_cat]}/100",
+                          "body": f"Les LLMs ne citent quasiment pas {brand} sur ces requêtes. Angle mort à combler."})
 
     df_all = load_scores(db_path, language)
     if not df_all.empty:
@@ -260,12 +266,12 @@ def generate_recommendations(db_path, brand, vertical, language=None, cat_labels
             if rank > 1:
                 delta = round(leader["score"] - pr["score"].values[0])
                 recos.append({"priority": "moyenne", "icon": "◎",
-                    "title": f"{brand} #{rank}/{len(df_all)} — {delta} pts derrière {leader['name']}",
-                    "body": f"Analyser les sources web des LLMs pour {leader['name']} et produire du contenu équivalent."})
+                              "title": f"{brand} #{rank}/{len(df_all)} — {delta} pts derrière {leader['name']}",
+                              "body": f"Analyser les sources web des LLMs pour {leader['name']} et produire du contenu équivalent."})
             else:
                 recos.append({"priority": "info", "icon": "✓",
-                    "title": f"{brand} #1 — position dominante",
-                    "body": f"Leader GEO avec {round(pr['score'].values[0])}/100. Maintenir via monitoring hebdomadaire."})
+                              "title": f"{brand} #1 — position dominante",
+                              "body": f"Leader GEO avec {round(pr['score'].values[0])}/100. Maintenir via monitoring hebdomadaire."})
 
     absent_prompts = load_prompts(db_path, brand, language, limit=50)
     if absent_prompts:
@@ -273,29 +279,28 @@ def generate_recommendations(db_path, brand, vertical, language=None, cat_labels
         if absent:
             pct = round(len(absent) / len(absent_prompts) * 100)
             recos.append({"priority": "haute" if pct >= 40 else "moyenne", "icon": "✗",
-                "title": f"{brand} absent de {len(absent)}/{len(absent_prompts)} réponses ({pct}%)",
-                "body": f"Créer du contenu structuré (Schema JSON-LD, FAQ) pour ces requêtes."})
+                          "title": f"{brand} absent de {len(absent)}/{len(absent_prompts)} réponses ({pct}%)",
+                          "body": f"Créer du contenu structuré (Schema JSON-LD, FAQ) pour ces requêtes."})
 
     if not recos:
         recos.append({"priority": "info", "icon": "✓",
-            "title": "Bonne performance globale",
-            "body": f"{brand} affiche de bons scores. Continuer le monitoring."})
+                      "title": "Bonne performance globale",
+                      "body": f"{brand} affiche de bons scores. Continuer le monitoring."})
+
     return recos
 
 
 # ─────────────────────────────────────────────
 # FACTORY — crée une app Dash par config
 # ─────────────────────────────────────────────
-
 def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
     """Crée et retourne une app Dash complète pour un slug donné.
-    
+
     Args:
         slug: identifiant client (psg, betclic, reims...)
         standalone: True pour test local (pas de préfixe URL),
                     False pour prod via DispatcherMiddleware wsgi.py
     """
-
     # ── Charger la config ──────────────────────
     config_path = BASE_DIR / "configs" / f"{slug}.json"
     if config_path.exists():
@@ -311,13 +316,14 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
         except Exception:
             raise FileNotFoundError(f"Ni config JSON ni voxa_db pour '{slug}'")
 
-    db_path     = _resolve_db_path(slug)
-    brand       = cfg["primary_brand"]
+    db_path = _resolve_db_path(slug)
+    brand = cfg["primary_brand"]
     client_name = cfg["client_name"]
-    vertical    = cfg.get("vertical", "sport")
+    vertical = cfg.get("vertical", "sport")
 
     LANG_FLAGS = {"fr": "🇫🇷", "en": "🇬🇧", "pt": "🇵🇹", "pl": "🇵🇱",
                   "fr-ci": "🇨🇮", "fr_ligue2": "🇫🇷"}
+
     CAT_LABELS = {
         "discovery": "Notoriété", "comparison": "Comparaison",
         "reputation": "Réputation", "transactional": "Transactionnel",
@@ -327,10 +333,7 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
     }
 
     # ── App Dash ──────────────────────────────
-    # En standalone (test local), pas de préfixe → routes à /
-    # En production (wsgi.py DispatcherMiddleware), préfixe /{slug}/
     prefix = "/" if standalone else f"/{slug}/"
-
     app = dash.Dash(
         __name__, server=True,
         requests_pathname_prefix=prefix,
@@ -345,8 +348,8 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
 
     def ctitle(text):
         return html.Div(text, style={
-            "fontSize": 10, "fontWeight": 700, "textTransform": "uppercase",
-            "letterSpacing": "2px", "color": T3, "marginBottom": 14,
+            "fontSize": 10, "fontWeight": 600, "textTransform": "uppercase",
+            "letterSpacing": "1.5px", "color": T3, "marginBottom": 12,
             "fontFamily": FONT_BODY})
 
     # ── Données initiales ─────────────────────
@@ -356,55 +359,82 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
         {"label": f"{LANG_FLAGS.get(m,'🌐')} {m.upper()}", "value": m}
         for m in markets_from_db]
 
+    # ── Topbar ──
     topbar = T.make_topbar(client_name=client_name, vertical=vertical,
-        right_children=[
-            html.A("↓ CSV", id=f"export-{slug}", href=f"{prefix}export/csv",
-                   style={"padding": "6px 12px", "borderRadius": 8,
-                          "border": f"1px solid {BD}", "background": BG3,
-                          "fontSize": 12, "fontWeight": 600, "color": T2,
-                          "textDecoration": "none"})])
+                           right_children=[
+                               html.A("↓ CSV", id=f"export-{slug}", href=f"{prefix}export/csv",
+                                      style={"padding": "6px 12px", "borderRadius": 8,
+                                             "border": f"0.5px solid {BD}", "background": BG3,
+                                             "fontSize": 12, "fontWeight": 600, "color": T2,
+                                             "textDecoration": "none"})])
 
-    tab_s  = {"fontSize": 11, "fontWeight": 700, "letterSpacing": "1px", "color": T3}
-    tab_sa = {"color": C1}
+    # ── Tabs (transformés en sidebar via CSS class .voxa-sidebar) ──
+    tab_s = {"fontSize": 13, "fontWeight": 500, "color": T2}
+    tab_sa = {"color": "#FFFFFF", "background": C1}
+
     tabs_list = []
     if has_multi_markets:
-        tabs_list.append(dbc.Tab(label="VUE GÉNÉRALE", tab_id="overview",
+        tabs_list.append(dbc.Tab(label="Vue générale", tab_id="overview",
                                  label_style=tab_s, active_label_style=tab_sa))
     tabs_list += [
-        dbc.Tab(label="CLASSEMENT", tab_id="ranking", label_style=tab_s, active_label_style=tab_sa),
-        dbc.Tab(label="ACTIONS", tab_id="actions", label_style=tab_s, active_label_style=tab_sa),
-        dbc.Tab(label="INSIGHTS", tab_id="insights", label_style=tab_s, active_label_style=tab_sa),
-    ]
-    tabs_list += [
-        dbc.Tab(label="PROMPTS", tab_id="prompts", label_style=tab_s, active_label_style=tab_sa),
-        dbc.Tab(label="BIBLIOTHÈQUE", tab_id="library", label_style=tab_s, active_label_style=tab_sa),
+        dbc.Tab(label="Classement", tab_id="ranking",
+                label_style=tab_s, active_label_style=tab_sa),
+        dbc.Tab(label="Pack Action", tab_id="actions",
+                label_style=tab_s, active_label_style=tab_sa),
+        dbc.Tab(label="Insights", tab_id="insights",
+                label_style=tab_s, active_label_style=tab_sa),
+        dbc.Tab(label="Prompts", tab_id="prompts",
+                label_style=tab_s, active_label_style=tab_sa),
+        dbc.Tab(label="Bibliothèque", tab_id="library",
+                label_style=tab_s, active_label_style=tab_sa),
     ]
 
-    # ── Layout ────────────────────────────────
+    # ── Filter bar (compact horizontal sticky) ──
+    filter_bar = html.Div([
+        html.Span("Marché :", style={
+            "fontSize": 10, "fontWeight": 600,
+            "color": T3, "letterSpacing": "1.5px",
+            "textTransform": "uppercase", "marginRight": 8}),
+        dbc.RadioItems(
+            id=f"market-{slug}",
+            options=market_opts, value="all",
+            inline=True,
+            inputStyle={"marginRight": 4},
+            labelStyle={"color": T2, "fontSize": 12, "marginRight": 12, "cursor": "pointer"},
+        ),
+    ], className="voxa-filter-bar")
+
+    # ── Footer ──
+    footer = html.Div([
+        html.Span("✓ Prompt library verticale · données propriétaires · historique indépendant"),
+        html.Span(["Voxa GEO Intelligence · ",
+                   html.A("luc@sharper-media.com", href="mailto:luc@sharper-media.com",
+                          style={"color": C1, "textDecoration": "none"})]),
+    ], style={"background": BG3, "borderTop": f"0.5px solid {BD}",
+              "padding": "12px 32px", "fontSize": 11, "color": T3,
+              "display": "flex", "justifyContent": "space-between",
+              "fontFamily": FONT_BODY})
+
+    # ── Layout horizontal sidebar + content ──
     app.layout = html.Div([
         topbar,
-        html.Div([dbc.Row([dbc.Col([
-            html.Div("MARCHÉ", style={"fontSize": 10, "fontWeight": 700,
-                                       "letterSpacing": "2px", "color": T3, "marginBottom": 8}),
-            dbc.RadioItems(id=f"market-{slug}", options=market_opts, value="all",
-                           inline=True, style={"color": T2, "fontSize": 13}),
-        ], width=12)])], style={"background": BG3, "border": f"1px solid {BD}",
-            "borderRadius": 12, "padding": "18px 24px", "margin": "20px 24px 0"}),
-        html.Div(id=f"hero-{slug}", style={"padding": "16px 24px 0"}),
-        dbc.Tabs(tabs_list, id=f"tabs-{slug}", active_tab="overview" if has_multi_markets else "ranking",
-                 style={"margin": "20px 24px 0", "borderBottom": f"1px solid {BD}"}),
-        html.Div(id=f"content-{slug}", style={"padding": "16px 24px 24px"}),
+        filter_bar,
         html.Div([
-            html.Span("✓ Prompt library verticale · données propriétaires · historique indépendant"),
-            html.Span(["Voxa GEO Intelligence · ",
-                html.A("luc@sharper-media.com", href="mailto:luc@sharper-media.com",
-                       style={"color": C1, "textDecoration": "none"})]),
-        ], style={"background": f"rgba(0,229,255,0.03)", "borderTop": f"1px solid {BD}",
-                  "padding": "12px 32px", "fontSize": 11, "color": T3,
-                  "display": "flex", "justifyContent": "space-between", "fontFamily": FONT_BODY}),
+            # Sidebar à gauche (dbc.Tabs en mode vertical via CSS)
+            html.Div([
+                dbc.Tabs(tabs_list, id=f"tabs-{slug}",
+                         active_tab="overview" if has_multi_markets else "ranking"),
+            ], className="voxa-sidebar"),
+            # Content area à droite
+            html.Div([
+                html.Div(id=f"hero-{slug}", style={"padding": "20px 28px 0"}),
+                html.Div(id=f"content-{slug}", style={"padding": "16px 28px 24px"}),
+            ], className="voxa-content"),
+        ], className="voxa-app"),
+        footer,
     ])
 
-    # ── Hero KPI ──────────────────────────────
+    # ── Hero KPI : 4 cards séparées avec icônes colorées ──
     @app.callback(Output(f"hero-{slug}", "children"), Input(f"market-{slug}", "value"))
     def update_hero(market):
         lang = None if market == "all" else market
@@ -413,36 +443,41 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
         nss = load_nss(db_path, brand, lang)
         primary = df[df["name"] == brand] if not df.empty else pd.DataFrame()
         sc_val = round(primary["score"].iloc[0]) if not primary.empty else 0
-        nss_col = NG if nss >= 0 else RED
-        return card([dbc.Row([
-            dbc.Col([
-                html.Div(str(sc_val), style={"fontSize": 52, "fontWeight": 900,
-                    "color": score_color(sc_val), "lineHeight": "1"}),
-                html.Div("/100", style={"fontSize": 14, "color": T3, "fontWeight": 600}),
-                html.Div(score_label(sc_val), style={"fontSize": 12, "fontWeight": 700,
-                    "color": score_color(sc_val), "marginTop": 4}),
-                html.Div(f"GEO Score · {brand}", style={"fontSize": 10, "fontWeight": 700,
-                    "letterSpacing": "2px", "color": T3, "marginTop": 8, "textTransform": "uppercase"}),
-            ], width=3),
-            dbc.Col([dbc.Row([
-                dbc.Col([
-                    html.Div(f"{nss:+d}%", style={"fontSize": 22, "fontWeight": 800, "color": nss_col}),
-                    html.Div("NET SENTIMENT", style={"fontSize": 10, "color": T3, "fontWeight": 700, "letterSpacing": "1px"}),
-                ], width=4),
-                dbc.Col([
-                    html.Div(str(len(hist)), style={"fontSize": 22, "fontWeight": 800, "color": C1}),
-                    html.Div("RUNS", style={"fontSize": 10, "color": T3, "fontWeight": 700, "letterSpacing": "1px"}),
-                ], width=4),
-                dbc.Col([
-                    html.Div(str(round(primary["mention_rate"].iloc[0]*100))+"%"
-                             if not primary.empty else "—",
-                             style={"fontSize": 22, "fontWeight": 800, "color": C1}),
-                    html.Div("MENTIONS", style={"fontSize": 10, "color": T3, "fontWeight": 700, "letterSpacing": "1px"}),
-                ], width=4),
-            ])], width=9),
-        ])], {"marginBottom": 0})
+        mention_pct = (round(primary["mention_rate"].iloc[0] * 100)
+                       if not primary.empty else 0)
 
-    # ── Tab routing ───────────────────────────
+        # Couleurs accent par KPI
+        sc_accent = score_color(sc_val) if score_color(sc_val) != T3 else C1
+        nss_accent = NG if nss >= 0 else RED
+
+        return dbc.Row([
+            dbc.Col(T.make_kpi_card(
+                label=f"GEO score · {brand}",
+                value=f"{sc_val}/100",
+                icon_key="score",
+                accent_color=sc_accent,
+            ), width=3),
+            dbc.Col(T.make_kpi_card(
+                label="Net sentiment",
+                value=f"{nss:+d}%",
+                icon_key="sentiment",
+                accent_color=nss_accent,
+            ), width=3),
+            dbc.Col(T.make_kpi_card(
+                label="Runs analysés",
+                value=str(len(hist)),
+                icon_key="prompt",
+                accent_color=C1,
+            ), width=3),
+            dbc.Col(T.make_kpi_card(
+                label="Taux de mentions",
+                value=f"{mention_pct}%",
+                icon_key="mention",
+                accent_color=C2,
+            ), width=3),
+        ], className="g-2", style={"marginBottom": 16})
+
+    # ── Tab routing (logique inchangée) ───────
     @app.callback(Output(f"content-{slug}", "children"),
                   Input(f"tabs-{slug}", "active_tab"), Input(f"market-{slug}", "value"))
     def update_content(tab, market):
@@ -459,144 +494,187 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
     def _tab_ranking(lang):
         df = load_scores(db_path, lang)
         hist = load_history(db_path, brand, lang=lang)
+
         if not df.empty:
             colors = [C1 if row["is_primary"] else T3 for _, row in df.iterrows()]
             bar = go.Figure(go.Bar(x=df["score"].round().astype(int), y=df["name"],
-                orientation="h", marker_color=colors,
-                text=df["score"].round().astype(int).astype(str)+"/100", textposition="auto",
-                textfont={"size": 12, "color": BG, "family": FONT_BODY},
-            )).update_layout(height=max(200, len(df)*40), margin=dict(l=0,r=10,t=0,b=0),
+                                   orientation="h", marker_color=colors,
+                                   text=df["score"].round().astype(int).astype(str) + "/100",
+                                   textposition="auto",
+                                   textfont={"size": 12, "color": "#FFFFFF", "family": FONT_BODY},
+                                   )).update_layout(
+                height=max(200, len(df) * 40), margin=dict(l=0, r=10, t=0, b=0),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                xaxis=dict(showgrid=False, range=[0,100], showticklabels=False, zeroline=False),
-                yaxis=dict(tickfont={"size":12, "color":T2, "family":FONT_BODY}),
-                font={"family":FONT_BODY}, showlegend=False)
+                xaxis=dict(showgrid=False, range=[0, 100], showticklabels=False, zeroline=False),
+                yaxis=dict(tickfont={"size": 12, "color": T2, "family": FONT_BODY}),
+                font={"family": FONT_BODY}, showlegend=False)
             bar_c = card([ctitle("CLASSEMENT CONCURRENTS"),
                           dcc.Graph(figure=bar, config={"displayModeBar": False})])
         else:
-            bar_c = card([ctitle("CLASSEMENT"), html.Div("Pas de données.", style={"color":T3,"fontSize":12})])
+            bar_c = card([ctitle("CLASSEMENT"),
+                          html.Div("Pas de données.", style={"color": T3, "fontSize": 12})])
 
         if hist and len(hist) > 1:
             line = go.Figure(go.Scatter(
                 x=[h["run_date"] for h in hist], y=[round(h["score"]) for h in hist],
-                mode="lines+markers", line=dict(color=C1,width=2), marker=dict(color=C1,size=6),
-                fill="tozeroy", fillcolor="rgba(0,229,255,0.06)", hovertemplate="%{y}/100<extra></extra>",
-            )).update_layout(height=200, margin=dict(l=0,r=10,t=0,b=0),
+                mode="lines+markers", line=dict(color=C1, width=2),
+                marker=dict(color=C1, size=6),
+                fill="tozeroy", fillcolor="rgba(0,184,212,0.08)",
+                hovertemplate="%{y}/100<extra></extra>",
+            )).update_layout(
+                height=200, margin=dict(l=0, r=10, t=0, b=0),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                xaxis=dict(showgrid=False, tickfont={"size":10,"color":T3,"family":FONT_BODY}),
-                yaxis=dict(range=[0,100], showgrid=True, gridcolor="rgba(255,255,255,0.04)",
-                           tickfont={"size":10,"color":T3}), font={"family":FONT_BODY})
+                xaxis=dict(showgrid=False, tickfont={"size": 10, "color": T3, "family": FONT_BODY}),
+                yaxis=dict(range=[0, 100], showgrid=True, gridcolor="rgba(13,17,23,0.04)",
+                           tickfont={"size": 10, "color": T3}),
+                font={"family": FONT_BODY})
             line_c = card([ctitle(f"ÉVOLUTION · {brand.upper()}"),
                            dcc.Graph(figure=line, config={"displayModeBar": False})])
         else:
             line_c = card([ctitle(f"ÉVOLUTION · {brand.upper()}"),
-                           html.Div("Données insuffisantes.", style={"color":T3,"fontSize":12})])
-        return dbc.Row([dbc.Col(bar_c, width=6), dbc.Col(line_c, width=6)], style={"marginTop":16})
+                           html.Div("Données insuffisantes.", style={"color": T3, "fontSize": 12})])
+
+        return dbc.Row([dbc.Col(bar_c, width=6), dbc.Col(line_c, width=6)],
+                       style={"marginTop": 16})
 
     # ── TAB: Insights ─────────────────────────
     def _tab_insights(lang):
         PS = {
-            "haute":   {"border": RED, "bg": "rgba(255,75,110,0.06)",
-                        "bbg": "rgba(255,75,110,0.12)", "bcol": RED},
-            "moyenne": {"border": C1,  "bg": "rgba(0,229,255,0.04)",
-                        "bbg": "rgba(0,229,255,0.10)",  "bcol": C1},
-            "info":    {"border": NG,  "bg": "rgba(0,255,170,0.04)",
-                        "bbg": "rgba(0,255,170,0.10)",  "bcol": NG},
+            "haute":   {"border": RED, "bg": BG_ERR, "bbg": "rgba(239,68,68,0.12)", "bcol": RED},
+            "moyenne": {"border": C1,  "bg": BG_ACCENT, "bbg": "rgba(0,184,212,0.12)", "bcol": C1},
+            "info":    {"border": NG,  "bg": BG_OK, "bbg": "rgba(16,185,129,0.12)", "bcol": NG},
         }
+
         def reco_ui(icon, prio, title, body_t, impact=None, prompt_t=None):
             ps = PS.get(prio, PS["info"])
             return html.Div([
                 html.Div([
-                    html.Span(icon, style={"fontSize":15,"marginRight":8}),
-                    html.Span(prio.upper(), style={"fontSize":9,"fontWeight":800,"letterSpacing":"1.5px",
-                        "padding":"2px 8px","borderRadius":20,"background":ps["bbg"],"color":ps["bcol"],
-                        "marginRight":10,"fontFamily":FONT_BODY}),
-                    html.Span(title, style={"fontSize":13,"fontWeight":700,"color":W,"fontFamily":FONT_BODY}),
-                    *([html.Span(f"+{impact:.0f} pts", style={"fontSize":10,"color":T3,"marginLeft":10})] if impact else []),
-                ], style={"marginBottom":6}),
-                html.Div(body_t, style={"fontSize":12,"color":T2,"lineHeight":"1.7","paddingLeft":22,"fontFamily":FONT_BODY}),
-                *([html.Div(f"Prompt : « {prompt_t[:80]}… »", style={"fontSize":10,"color":T3,"paddingLeft":22,"marginTop":4,"fontStyle":"italic"})] if prompt_t else []),
-            ], style={"borderLeft":f"3px solid {ps['border']}","background":ps["bg"],
-                      "borderRadius":"0 10px 10px 0","padding":"12px 18px","marginBottom":10})
+                    html.Span(icon, style={"fontSize": 15, "marginRight": 8}),
+                    html.Span(prio.upper(), style={
+                        "fontSize": 9, "fontWeight": 700, "letterSpacing": "1.5px",
+                        "padding": "2px 8px", "borderRadius": 12,
+                        "background": ps["bbg"], "color": ps["bcol"],
+                        "marginRight": 10, "fontFamily": FONT_BODY}),
+                    html.Span(title, style={
+                        "fontSize": 13, "fontWeight": 600, "color": W,
+                        "fontFamily": FONT_BODY}),
+                    *([html.Span(f"+{impact:.0f} pts",
+                                 style={"fontSize": 10, "color": T3, "marginLeft": 10})]
+                      if impact else []),
+                ], style={"marginBottom": 6}),
+                html.Div(body_t, style={
+                    "fontSize": 12, "color": T2, "lineHeight": "1.7",
+                    "paddingLeft": 22, "fontFamily": FONT_BODY}),
+                *([html.Div(f"Prompt : « {prompt_t[:80]}… »",
+                            style={"fontSize": 10, "color": T3, "paddingLeft": 22,
+                                   "marginTop": 4, "fontStyle": "italic"})] if prompt_t else []),
+            ], style={"borderLeft": f"3px solid {ps['border']}", "background": ps["bg"],
+                      "borderRadius": "0 8px 8px 0", "padding": "12px 18px", "marginBottom": 10})
 
         recos = generate_recommendations(db_path, brand, vertical, lang, CAT_LABELS)
-        reco_cards = [reco_ui(r.get("icon","💡"), r["priority"], r["title"], r["body"]) for r in recos]
+        reco_cards = [reco_ui(r.get("icon", "💡"), r["priority"], r["title"], r["body"]) for r in recos]
 
         alert_block = db_block = html.Div()
         try:
             import voxa_db as vdb
             db_alerts = vdb.get_alerts(slug, unread_only=True)
             db_recos = vdb.get_recommendations(slug)
-            SS = {"critical":{"i":"⚠","b":RED,"bg":"rgba(255,75,110,0.06)"},
-                  "warning":{"i":"◎","b":C1,"bg":"rgba(0,229,255,0.04)"},
-                  "info":{"i":"✓","b":NG,"bg":"rgba(0,255,170,0.04)"}}
+            SS = {"critical": {"i": "⚠", "b": RED, "bg": BG_ERR},
+                  "warning":  {"i": "◎", "b": C1, "bg": BG_ACCENT},
+                  "info":     {"i": "✓", "b": NG, "bg": BG_OK}}
             if db_alerts:
                 aitems = []
                 for a in db_alerts:
-                    ss = SS.get(a.get("severity","info"), SS["info"])
+                    ss = SS.get(a.get("severity", "info"), SS["info"])
                     aitems.append(html.Div([
-                        html.Div([html.Span(ss["i"], style={"marginRight":8,"fontSize":12,"color":ss["b"],"fontWeight":800}),
-                                  html.Span(a["title"], style={"fontWeight":700,"color":W,"fontSize":13}),
-                                  html.Span(f"  {a['created_at'][:10]}", style={"fontSize":10,"color":T3,"marginLeft":10})],
-                                 style={"marginBottom":3}),
-                        html.Div(a["body"], style={"fontSize":12,"color":T2,"paddingLeft":20,"lineHeight":1.5}),
-                    ], style={"padding":"10px 14px","marginBottom":8,"background":ss["bg"],
-                              "borderRadius":8,"borderLeft":f"3px solid {ss['b']}"}))
-                alert_block = card([ctitle("ALERTES ACTIVES"), *aitems], {"marginBottom":16})
+                        html.Div([html.Span(ss["i"],
+                                            style={"marginRight": 8, "fontSize": 12,
+                                                   "color": ss["b"], "fontWeight": 700}),
+                                  html.Span(a["title"],
+                                            style={"fontWeight": 600, "color": W, "fontSize": 13}),
+                                  html.Span(f" {a['created_at'][:10]}",
+                                            style={"fontSize": 10, "color": T3, "marginLeft": 10})],
+                                 style={"marginBottom": 3}),
+                        html.Div(a["body"],
+                                 style={"fontSize": 12, "color": T2, "paddingLeft": 20,
+                                        "lineHeight": 1.5}),
+                    ], style={"padding": "10px 14px", "marginBottom": 8, "background": ss["bg"],
+                              "borderRadius": 8, "borderLeft": f"3px solid {ss['b']}"}))
+                alert_block = card([ctitle("ALERTES ACTIVES"), *aitems], {"marginBottom": 16})
             if db_recos:
-                pm = {"high":"haute","medium":"moyenne","low":"info"}
-                dcards = [reco_ui("💡", pm.get(r.get("priority"),"moyenne"), r.get("title",""),
-                                  r.get("body",""), impact=r.get("impact_score"), prompt_t=r.get("prompt_text"))
+                pm = {"high": "haute", "medium": "moyenne", "low": "info"}
+                dcards = [reco_ui("💡", pm.get(r.get("priority"), "moyenne"), r.get("title", ""),
+                                  r.get("body", ""), impact=r.get("impact_score"),
+                                  prompt_t=r.get("prompt_text"))
                           for r in db_recos]
                 db_block = card([ctitle("RECOMMANDATIONS GEO — ACTIONS PRIORITAIRES"), *dcards,
-                    html.Div("Générées après chaque run tracker.", style={"fontSize":11,"color":T3,"marginTop":8,"fontStyle":"italic"})],
-                    {"marginBottom":16})
+                                 html.Div("Générées après chaque run tracker.",
+                                          style={"fontSize": 11, "color": T3, "marginTop": 8,
+                                                 "fontStyle": "italic"})], {"marginBottom": 16})
         except Exception:
             pass
 
-        gap_section = html.Div("Données insuffisantes.", style={"color":T3,"fontSize":12,"padding":"12px 0"})
+        gap_section = html.Div("Données insuffisantes.",
+                               style={"color": T3, "fontSize": 12, "padding": "12px 0"})
         gap_df = load_gap_analysis(db_path, lang)
         if not gap_df.empty:
             cat_cols = [c for c in gap_df.columns if c in CAT_LABELS]
             brand_sc = gap_df.loc[brand] if brand in gap_df.index else pd.Series()
-            hdr = [html.Th("", style={"width":130,"padding":"8px 12px"})] + [
-                html.Th(CAT_LABELS.get(c,c), style={"fontSize":10,"fontWeight":700,"textTransform":"uppercase",
-                    "letterSpacing":"1px","color":T3,"textAlign":"center","padding":"8px 12px","background":BG})
+            hdr = [html.Th("", style={"width": 130, "padding": "8px 12px"})] + [
+                html.Th(CAT_LABELS.get(c, c),
+                        style={"fontSize": 10, "fontWeight": 600, "textTransform": "uppercase",
+                               "letterSpacing": "1px", "color": T3, "textAlign": "center",
+                               "padding": "8px 12px", "background": BG})
                 for c in cat_cols]
             rows = []
             for b in gap_df.index:
                 is_p = (b == brand)
-                cells = [html.Td(b, style={"fontWeight":800 if is_p else 600,"fontSize":13,
-                    "color":C1 if is_p else W,"padding":"10px 12px",
-                    "background":"rgba(0,229,255,0.04)" if is_p else BG3})]
+                cells = [html.Td(b, style={"fontWeight": 700 if is_p else 500, "fontSize": 13,
+                                           "color": C1 if is_p else W, "padding": "10px 12px",
+                                           "background": BG_ACCENT if is_p else BG3})]
                 for c in cat_cols:
-                    val = int(gap_df.loc[b,c]) if c in gap_df.columns else 0
-                    if is_p: bg_c, col = "rgba(0,229,255,0.08)", C1
+                    val = int(gap_df.loc[b, c]) if c in gap_df.columns else 0
+                    if is_p:
+                        bg_c, col = BG_ACCENT, C1
                     else:
                         d = val - (int(brand_sc[c]) if c in brand_sc.index else 0)
-                        if d > 10: bg_c, col = "rgba(255,75,110,0.08)", RED
-                        elif d < -10: bg_c, col = "rgba(0,255,170,0.08)", NG
-                        else: bg_c, col = BG3, T2
-                    cells.append(html.Td(str(val), style={"textAlign":"center","fontSize":14,
-                        "fontWeight":800 if is_p else 600,"color":col,"background":bg_c,"padding":"10px 12px"}))
-                rows.append(html.Tr(cells, style={"borderBottom":f"1px solid {BD}"}))
-            gap_section = dbc.Table([html.Thead(html.Tr(hdr), style={"borderBottom":f"2px solid {BD}"}),
-                                     html.Tbody(rows)], bordered=False, hover=False, style={"fontFamily":FONT_BODY})
+                        if d > 10:
+                            bg_c, col = BG_ERR, RED
+                        elif d < -10:
+                            bg_c, col = BG_OK, NG
+                        else:
+                            bg_c, col = BG3, T2
+                    cells.append(html.Td(str(val),
+                                         style={"textAlign": "center", "fontSize": 14,
+                                                "fontWeight": 700 if is_p else 500,
+                                                "color": col, "background": bg_c,
+                                                "padding": "10px 12px"}))
+                rows.append(html.Tr(cells, style={"borderBottom": f"0.5px solid {BD}"}))
+            gap_section = dbc.Table([html.Thead(html.Tr(hdr),
+                                                style={"borderBottom": f"1px solid {BD}"}),
+                                     html.Tbody(rows)],
+                                    bordered=False, hover=False,
+                                    style={"fontFamily": FONT_BODY})
 
         mkt_lbl = lang.upper() if lang else "TOUS MARCHÉS"
-        return html.Div([alert_block,
-            card([ctitle(f"RECOMMANDATIONS · {mkt_lbl}"), *(reco_cards or [
-                html.Div("Aucune recommandation critique.", style={"color":T3,"fontSize":12})])], {"marginBottom":16}),
+        return html.Div([
+            alert_block,
+            card([ctitle(f"RECOMMANDATIONS · {mkt_lbl}"),
+                  *(reco_cards or [html.Div("Aucune recommandation critique.",
+                                            style={"color": T3, "fontSize": 12})])],
+                 {"marginBottom": 16}),
             db_block,
             card([ctitle(f"GAP ANALYSIS · {brand.upper()} VS CONCURRENTS"),
-                html.Div([
-                    html.Span("",style={"display":"inline-block","width":8,"height":8,"borderRadius":3,
-                        "background":"rgba(0,255,170,0.4)","marginRight":4}),
-                    html.Span(f"{brand} devant",style={"fontSize":10,"color":NG,"marginRight":16}),
-                    html.Span("",style={"display":"inline-block","width":8,"height":8,"borderRadius":3,
-                        "background":"rgba(255,75,110,0.4)","marginRight":4}),
-                    html.Span("Concurrent devant",style={"fontSize":10,"color":RED}),
-                ], style={"marginBottom":12}),
-                gap_section])])
+                  html.Div([
+                      html.Span("", style={"display": "inline-block", "width": 8, "height": 8,
+                                           "borderRadius": 3, "background": NG, "marginRight": 4}),
+                      html.Span(f"{brand} devant",
+                                style={"fontSize": 10, "color": NG, "marginRight": 16}),
+                      html.Span("", style={"display": "inline-block", "width": 8, "height": 8,
+                                           "borderRadius": 3, "background": RED, "marginRight": 4}),
+                      html.Span("Concurrent devant", style={"fontSize": 10, "color": RED}),
+                  ], style={"marginBottom": 12}),
+                  gap_section])])
 
     # ── TAB: Actions (Pack Hebdo) ─────────────
     def _tab_actions():
@@ -609,126 +687,123 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
         pack = get_latest_pack(slug)
         history = get_pack_history(slug, limit=8)
 
-        # ── Pack actuel ──
         if not pack or not pack.get("items"):
             pack_section = card([
                 ctitle("PACK ACTIONS HEBDO"),
                 html.Div([
-                    html.Div("Aucun pack généré cette semaine.", style={
-                        "fontSize": 13, "color": T3, "marginBottom": 12}),
-                    html.Div("Lancez la commande pour générer le premier pack :", style={
-                        "fontSize": 12, "color": T3, "marginBottom": 8}),
+                    html.Div("Aucun pack généré cette semaine.",
+                             style={"fontSize": 13, "color": T3, "marginBottom": 12}),
+                    html.Div("Lancez la commande pour générer le premier pack :",
+                             style={"fontSize": 12, "color": T3, "marginBottom": 8}),
                     html.Code("python3 action_pack.py --slug " + slug + " --iterate",
-                              style={"fontSize": 12, "padding": "8px 14px", "display": "block",
-                                     "background": BG, "borderRadius": 8, "color": C1}),
+                             style={"fontSize": 12, "padding": "8px 14px", "display": "block",
+                                    "background": BG, "borderRadius": 8, "color": C1}),
                 ]),
             ], {"marginBottom": 16})
         else:
             week_label = pack.get("week", "")
             items_ui = []
             for item in pack["items"]:
-                sc_cur  = item.get("score_current", 0)
+                sc_cur = item.get("score_current", 0)
                 sc_pred = item.get("score_predicted", 0)
-                delta   = sc_pred - sc_cur
-                status  = item.get("status", "pending")
-                prompt  = item.get("prompt_text", "")
+                delta = sc_pred - sc_cur
+                status = item.get("status", "pending")
+                prompt = item.get("prompt_text", "")
                 content = item.get("content", "")
-                jsonld  = item.get("jsonld_schema", "")
-                n_iter  = item.get("n_iterations", 1)
-                cat     = item.get("category", "")
-                lang    = item.get("language", "")
+                jsonld = item.get("jsonld_schema", "")
+                n_iter = item.get("n_iterations", 1)
+                cat = item.get("category", "")
 
-                # Styles par priorité
                 if delta >= 40:
-                    border_col, bg_col, prio_label = RED, "rgba(255,75,110,0.05)", "HAUTE"
+                    border_col, bg_col, prio_label = RED, BG_ERR, "HAUTE"
                 elif delta >= 20:
-                    border_col, bg_col, prio_label = C1, "rgba(0,229,255,0.04)", "MOYENNE"
+                    border_col, bg_col, prio_label = C1, BG_ACCENT, "MOYENNE"
                 else:
-                    border_col, bg_col, prio_label = NG, "rgba(0,255,170,0.04)", "INFO"
+                    border_col, bg_col, prio_label = NG, BG_OK, "INFO"
 
-                # Status badge
                 if status == "implemented":
                     status_badge = html.Span("✓ IMPLÉMENTÉ", style={
-                        "fontSize": 9, "fontWeight": 800, "padding": "2px 8px",
-                        "borderRadius": 20, "background": "rgba(0,255,170,0.12)",
+                        "fontSize": 9, "fontWeight": 700, "padding": "2px 8px",
+                        "borderRadius": 12, "background": BG_OK,
                         "color": NG, "marginLeft": 10})
                 elif status == "measured":
                     sc_real = item.get("score_real", 0)
                     diff = sc_real - sc_pred
                     diff_col = NG if diff >= -5 else RED
-                    status_badge = html.Span(f"MESURÉ : {sc_real}/100 ({diff:+d} vs prédit)", style={
-                        "fontSize": 9, "fontWeight": 800, "padding": "2px 8px",
-                        "borderRadius": 20, "background": f"rgba(0,255,170,0.12)",
-                        "color": diff_col, "marginLeft": 10})
+                    status_badge = html.Span(
+                        f"MESURÉ : {sc_real}/100 ({diff:+d} vs prédit)",
+                        style={"fontSize": 9, "fontWeight": 700, "padding": "2px 8px",
+                               "borderRadius": 12, "background": BG_OK,
+                               "color": diff_col, "marginLeft": 10})
                 else:
                     status_badge = html.Span("EN ATTENTE", style={
-                        "fontSize": 9, "fontWeight": 800, "padding": "2px 8px",
-                        "borderRadius": 20, "background": "rgba(168,184,200,0.12)",
+                        "fontSize": 9, "fontWeight": 700, "padding": "2px 8px",
+                        "borderRadius": 12, "background": BG2,
                         "color": T3, "marginLeft": 10})
 
                 item_ui = html.Div([
-                    # Header : priorité + prompt + status
                     html.Div([
                         html.Span(prio_label, style={
-                            "fontSize": 9, "fontWeight": 800, "letterSpacing": "1.5px",
-                            "padding": "2px 8px", "borderRadius": 20,
-                            "background": f"rgba({','.join(str(int(border_col.lstrip('#')[i:i+2], 16)) for i in (0,2,4))},0.12)" if border_col.startswith("#") else bg_col,
-                            "color": border_col, "marginRight": 10, "fontFamily": FONT_BODY}),
-                        html.Span(f"[{cat}] " if cat else "", style={
-                            "fontSize": 10, "color": T3, "marginRight": 4}),
-                        html.Span(prompt[:80] + ("..." if len(prompt) > 80 else ""), style={
-                            "fontSize": 13, "fontWeight": 700, "color": W, "fontFamily": FONT_BODY}),
+                            "fontSize": 9, "fontWeight": 700, "letterSpacing": "1.5px",
+                            "padding": "2px 8px", "borderRadius": 12,
+                            "background": bg_col, "color": border_col,
+                            "marginRight": 10, "fontFamily": FONT_BODY}),
+                        html.Span(f"[{cat}] " if cat else "",
+                                  style={"fontSize": 10, "color": T3, "marginRight": 4}),
+                        html.Span(prompt[:80] + ("..." if len(prompt) > 80 else ""),
+                                  style={"fontSize": 13, "fontWeight": 600, "color": W,
+                                         "fontFamily": FONT_BODY}),
                         status_badge,
                     ], style={"marginBottom": 8}),
-
-                    # Scores
                     html.Div([
-                        html.Span(f"Score actuel : ", style={"fontSize": 12, "color": T3}),
-                        html.Span(f"{sc_cur}/100", style={
-                            "fontSize": 14, "fontWeight": 800, "color": score_color(sc_cur), "marginRight": 16}),
+                        html.Span("Score actuel : ", style={"fontSize": 12, "color": T3}),
+                        html.Span(f"{sc_cur}/100",
+                                  style={"fontSize": 14, "fontWeight": 700,
+                                         "color": score_color(sc_cur), "marginRight": 16}),
                         html.Span(" → ", style={"fontSize": 14, "color": T3, "marginRight": 16}),
-                        html.Span(f"Prédit : ", style={"fontSize": 12, "color": T3}),
-                        html.Span(f"{sc_pred}/100", style={
-                            "fontSize": 14, "fontWeight": 800, "color": score_color(sc_pred), "marginRight": 16}),
-                        html.Span(f"(+{delta})", style={
-                            "fontSize": 12, "fontWeight": 700, "color": NG}),
-                        html.Span(f" · {n_iter} itération{'s' if n_iter > 1 else ''}", style={
-                            "fontSize": 10, "color": T3, "marginLeft": 12}),
+                        html.Span("Prédit : ", style={"fontSize": 12, "color": T3}),
+                        html.Span(f"{sc_pred}/100",
+                                  style={"fontSize": 14, "fontWeight": 700,
+                                         "color": score_color(sc_pred), "marginRight": 16}),
+                        html.Span(f"(+{delta})",
+                                  style={"fontSize": 12, "fontWeight": 600, "color": NG}),
+                        html.Span(f" · {n_iter} itération{'s' if n_iter > 1 else ''}",
+                                  style={"fontSize": 10, "color": T3, "marginLeft": 12}),
                     ], style={"marginBottom": 10}),
-
-                    # Contenu + JSON-LD
                     html.Details([
-                        html.Summary("Voir le contenu optimisé + JSON-LD", style={
-                            "fontSize": 12, "color": C1, "cursor": "pointer",
-                            "fontWeight": 600, "fontFamily": FONT_BODY}),
+                        html.Summary("Voir le contenu optimisé + JSON-LD",
+                                     style={"fontSize": 12, "color": C1, "cursor": "pointer",
+                                            "fontWeight": 600, "fontFamily": FONT_BODY}),
                         html.Div([
-                            html.Div("CONTENU OPTIMISÉ", style={
-                                "fontSize": 9, "fontWeight": 700, "letterSpacing": "1.5px",
-                                "color": T3, "marginBottom": 6, "marginTop": 10}),
-                            html.Pre(content, style={
-                                "fontSize": 12, "color": T2, "lineHeight": "1.6",
-                                "background": BG, "padding": "12px 14px",
-                                "borderRadius": 8, "border": f"1px solid {BD}",
-                                "whiteSpace": "pre-wrap", "fontFamily": FONT_BODY,
-                                "maxHeight": 200, "overflowY": "auto"}),
-                            *([ html.Div([
-                                html.Div("JSON-LD (copier dans <head>)", style={
-                                    "fontSize": 9, "fontWeight": 700, "letterSpacing": "1.5px",
-                                    "color": T3, "marginBottom": 6, "marginTop": 12}),
-                                html.Pre(jsonld, style={
-                                    "fontSize": 11, "color": C1, "lineHeight": "1.4",
-                                    "background": BG, "padding": "12px 14px",
-                                    "borderRadius": 8, "border": f"1px solid rgba(0,229,255,0.2)",
-                                    "whiteSpace": "pre-wrap", "fontFamily": "'JetBrains Mono', monospace",
-                                    "maxHeight": 250, "overflowY": "auto"}),
-                            ]) ] if jsonld else []),
+                            html.Div("CONTENU OPTIMISÉ",
+                                     style={"fontSize": 9, "fontWeight": 600,
+                                            "letterSpacing": "1.5px", "color": T3,
+                                            "marginBottom": 6, "marginTop": 10}),
+                            html.Pre(content,
+                                     style={"fontSize": 12, "color": T2, "lineHeight": "1.6",
+                                            "background": BG, "padding": "12px 14px",
+                                            "borderRadius": 8, "border": f"0.5px solid {BD}",
+                                            "whiteSpace": "pre-wrap", "fontFamily": FONT_BODY,
+                                            "maxHeight": 200, "overflowY": "auto"}),
+                            *([html.Div([
+                                html.Div("JSON-LD (copier dans <head>)",
+                                         style={"fontSize": 9, "fontWeight": 600,
+                                                "letterSpacing": "1.5px", "color": T3,
+                                                "marginBottom": 6, "marginTop": 12}),
+                                html.Pre(jsonld,
+                                         style={"fontSize": 11, "color": "#006B7A",
+                                                "lineHeight": "1.4", "background": BG,
+                                                "padding": "12px 14px", "borderRadius": 8,
+                                                "border": f"0.5px solid {BD}",
+                                                "whiteSpace": "pre-wrap",
+                                                "fontFamily": "'JetBrains Mono', monospace",
+                                                "maxHeight": 250, "overflowY": "auto"}),
+                            ])] if jsonld else []),
                         ]),
                     ], style={"marginTop": 4}),
-                ], style={
-                    "borderLeft": f"3px solid {border_col}", "background": bg_col,
-                    "borderRadius": "0 10px 10px 0",
-                    "padding": "14px 18px", "marginBottom": 12})
-
+                ], style={"borderLeft": f"3px solid {border_col}", "background": bg_col,
+                          "borderRadius": "0 8px 8px 0",
+                          "padding": "14px 18px", "marginBottom": 12})
                 items_ui.append(item_ui)
 
             pack_section = card([
@@ -738,53 +813,61 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
                 *items_ui,
             ], {"marginBottom": 16})
 
-        # ── Historique des packs précédents ──
         hist_section = html.Div()
         if history and len(history) > 0:
             hist_rows = []
             for h in history:
-                avg_cur  = round(h.get("avg_current") or 0)
+                avg_cur = round(h.get("avg_current") or 0)
                 avg_pred = round(h.get("avg_predicted") or 0)
                 avg_real = round(h.get("avg_real") or 0) if h.get("avg_real") else "—"
-                n_impl   = h.get("n_implemented", 0)
-                n_items  = h.get("n_items", 0)
-
+                n_impl = h.get("n_implemented", 0)
+                n_items = h.get("n_items", 0)
                 accuracy = ""
                 if isinstance(avg_real, int) and avg_pred > 0:
                     diff = avg_real - avg_pred
                     accuracy = f"{diff:+d}"
-
                 hist_rows.append(html.Tr([
-                    html.Td(h.get("week", ""), style={"padding": "8px 12px", "fontWeight": 700, "color": C1, "fontSize": 12}),
-                    html.Td(f"{n_impl}/{n_items}", style={"padding": "8px 12px", "color": T2, "fontSize": 12}),
-                    html.Td(str(avg_cur), style={"padding": "8px 12px", "color": score_color(avg_cur), "fontWeight": 700, "fontSize": 13}),
-                    html.Td(str(avg_pred), style={"padding": "8px 12px", "color": C1, "fontWeight": 700, "fontSize": 13}),
-                    html.Td(str(avg_real), style={"padding": "8px 12px", "color": NG if isinstance(avg_real, int) else T3, "fontWeight": 700, "fontSize": 13}),
-                    html.Td(accuracy, style={"padding": "8px 12px", "color": NG if accuracy.startswith("+") or accuracy == "" else RED, "fontWeight": 700, "fontSize": 12}),
-                ], style={"borderBottom": f"1px solid {BD}"}))
+                    html.Td(h.get("week", ""),
+                            style={"padding": "8px 12px", "fontWeight": 600,
+                                   "color": C1, "fontSize": 12}),
+                    html.Td(f"{n_impl}/{n_items}",
+                            style={"padding": "8px 12px", "color": T2, "fontSize": 12}),
+                    html.Td(str(avg_cur),
+                            style={"padding": "8px 12px", "color": score_color(avg_cur),
+                                   "fontWeight": 600, "fontSize": 13}),
+                    html.Td(str(avg_pred),
+                            style={"padding": "8px 12px", "color": C1,
+                                   "fontWeight": 600, "fontSize": 13}),
+                    html.Td(str(avg_real),
+                            style={"padding": "8px 12px",
+                                   "color": NG if isinstance(avg_real, int) else T3,
+                                   "fontWeight": 600, "fontSize": 13}),
+                    html.Td(accuracy,
+                            style={"padding": "8px 12px",
+                                   "color": NG if accuracy.startswith("+") or accuracy == "" else RED,
+                                   "fontWeight": 600, "fontSize": 12}),
+                ], style={"borderBottom": f"0.5px solid {BD}"}))
 
             hist_section = card([
                 ctitle("HISTORIQUE DES PACKS"),
                 dbc.Table([
                     html.Thead(html.Tr([
                         *[html.Th(h, style={
-                            "fontSize": 10, "fontWeight": 700, "letterSpacing": "1.5px",
+                            "fontSize": 10, "fontWeight": 600, "letterSpacing": "1.5px",
                             "textTransform": "uppercase", "color": T3,
                             "padding": "8px 12px", "background": BG})
                           for h in ["Semaine", "Implémenté", "Avant", "Prédit", "Réel", "Δ préd."]]
-                    ]), style={"borderBottom": f"2px solid {BD}"}),
+                    ]), style={"borderBottom": f"1px solid {BD}"}),
                     html.Tbody(hist_rows),
                 ], bordered=False, hover=False, style={"fontFamily": FONT_BODY}),
-                html.Div(
-                    "Le score réel est mesuré 4 semaines après implémentation.",
-                    style={"fontSize": 11, "color": T3, "marginTop": 8, "fontStyle": "italic"}),
+                html.Div("Le score réel est mesuré 4 semaines après implémentation.",
+                         style={"fontSize": 11, "color": T3, "marginTop": 8, "fontStyle": "italic"}),
             ])
 
         return html.Div([pack_section, hist_section], style={"marginTop": 16})
 
-    # ── TAB: Multi-Marchés ────────────────────
+    # ── TAB: Vue générale (multi-marchés) ─────
     def _tab_overview(lang):
-        # Score (filtré par marché si sélectionné)
         all_df = load_scores(db_path, lang)
         brand_row = all_df[all_df["name"] == brand] if not all_df.empty else pd.DataFrame()
         global_score = round(brand_row["score"].iloc[0]) if not brand_row.empty else 0
@@ -792,7 +875,6 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
         n_brands = len(all_df)
         show_markets = [lang] if lang else markets_from_db
 
-        # Score par marché
         mcards = []
         for mkt in show_markets:
             df = load_scores(db_path, mkt)
@@ -800,96 +882,126 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
             sc = round(pr["score"].iloc[0]) if not pr.empty else 0
             rank = df.index.get_loc(pr.index[0]) + 1 if not pr.empty else "—"
             mcards.append(html.Div([
-                html.Div(LANG_FLAGS.get(mkt,"🌐"), style={"fontSize":24,"marginBottom":6}),
-                html.Div(str(sc), style={"fontSize":36,"fontWeight":800,"color":score_color(sc),"lineHeight":"1"}),
-                html.Div("/100", style={"fontSize":10,"color":T3}),
-                html.Div(mkt.upper(), style={"fontSize":11,"fontWeight":700,"color":T2,"marginTop":4}),
-                html.Div(f"#{rank}/{len(df)}", style={"fontSize":10,"color":T3,"marginTop":2}),
-            ], style={"border":f"1px solid {BD}","borderRadius":12,"padding":"20px","textAlign":"center","flex":1}))
+                html.Div(LANG_FLAGS.get(mkt, "🌐"), style={"fontSize": 24, "marginBottom": 6}),
+                html.Div(str(sc),
+                         style={"fontSize": 32, "fontWeight": 600,
+                                "color": score_color(sc), "lineHeight": "1"}),
+                html.Div("/100", style={"fontSize": 10, "color": T3}),
+                html.Div(mkt.upper(),
+                         style={"fontSize": 11, "fontWeight": 600,
+                                "color": T2, "marginTop": 4}),
+                html.Div(f"#{rank}/{len(df)}",
+                         style={"fontSize": 10, "color": T3, "marginTop": 2}),
+            ], style={"border": f"0.5px solid {BD}", "borderRadius": 8,
+                      "padding": "20px", "textAlign": "center", "flex": 1,
+                      "background": BG3}))
 
-        # Top concurrents
         comp_rows = []
         for i, (_, row) in enumerate(all_df.head(7).iterrows(), 1):
             is_brand = row["name"] == brand
             sc = round(row["score"])
             comp_rows.append(html.Div([
-                html.Span(f"#{i}", style={"fontSize":12,"fontWeight":700,"color":C1 if is_brand else T3,
-                                          "width":30,"display":"inline-block"}),
-                html.Span(f"{'★ ' if is_brand else ''}{row['name']}", style={
-                    "fontSize":13,"fontWeight":800 if is_brand else 600,
-                    "color":C1 if is_brand else W,"width":180,"display":"inline-block"}),
-                html.Div(style={"display":"inline-block","width":f"{sc*1.5}px","height":8,
-                                "background":C1 if is_brand else "rgba(168,184,200,0.3)",
-                                "borderRadius":4,"marginRight":10,"verticalAlign":"middle"}),
-                html.Span(f"{sc}/100", style={"fontSize":13,"fontWeight":800 if is_brand else 600,
-                                              "color":score_color(sc)}),
-            ], style={"padding":"6px 0","borderBottom":f"1px solid {BD}" if not is_brand else f"1px solid rgba(0,229,255,0.2)",
-                      "background":"rgba(0,229,255,0.04)" if is_brand else "transparent"}))
+                html.Span(f"#{i}", style={"fontSize": 12, "fontWeight": 600,
+                                          "color": C1 if is_brand else T3,
+                                          "width": 30, "display": "inline-block"}),
+                html.Span(f"{'★ ' if is_brand else ''}{row['name']}",
+                          style={"fontSize": 13, "fontWeight": 700 if is_brand else 500,
+                                 "color": C1 if is_brand else W,
+                                 "width": 180, "display": "inline-block"}),
+                html.Div(style={"display": "inline-block", "width": f"{sc * 1.5}px",
+                                "height": 8, "background": C1 if is_brand else BG2,
+                                "borderRadius": 4, "marginRight": 10,
+                                "verticalAlign": "middle"}),
+                html.Span(f"{sc}/100",
+                          style={"fontSize": 13, "fontWeight": 700 if is_brand else 500,
+                                 "color": score_color(sc)}),
+            ], style={"padding": "6px 0",
+                      "borderBottom": f"0.5px solid {BD}",
+                      "background": BG_ACCENT if is_brand else "transparent"}))
 
-        mkt_label = LANG_FLAGS.get(lang,"") + " " + (lang.upper() if lang else "TOUS MARCHÉS")
-
+        mkt_label = LANG_FLAGS.get(lang, "") + " " + (lang.upper() if lang else "TOUS MARCHÉS")
         return html.Div([
             card([
                 html.Div([
                     html.Div([
-                        html.Div(f"GEO SCORE · {mkt_label}", style={"fontSize":10,"fontWeight":700,
-                                 "letterSpacing":"2px","color":T3,"marginBottom":8}),
+                        html.Div(f"GEO SCORE · {mkt_label}",
+                                 style={"fontSize": 10, "fontWeight": 600,
+                                        "letterSpacing": "1.5px", "color": T3,
+                                        "marginBottom": 8}),
                         html.Div([
-                            html.Span(str(global_score), style={"fontSize":52,"fontWeight":800,
-                                       "color":score_color(global_score),"lineHeight":"1"}),
-                            html.Span("/100", style={"fontSize":16,"color":T3,"marginLeft":4}),
+                            html.Span(str(global_score),
+                                      style={"fontSize": 48, "fontWeight": 600,
+                                             "color": score_color(global_score),
+                                             "lineHeight": "1"}),
+                            html.Span("/100",
+                                      style={"fontSize": 16, "color": T3, "marginLeft": 4}),
                         ]),
                         html.Div(f"#{global_rank} sur {n_brands} concurrents",
-                                 style={"fontSize":12,"color":T3,"marginTop":6}),
-                    ], style={"flex":"0 0 200px"}),
-                    html.Div(comp_rows, style={"flex":"1","marginLeft":40}),
-                ], style={"display":"flex","alignItems":"flex-start"}),
-            ], {"marginBottom":16}),
-            card([ctitle(f"SCORE PAR MARCHÉ · {len(show_markets)} MARCHÉ{'S' if len(show_markets)>1 else ''}"),
-                  html.Div(mcards, style={"display":"flex","gap":16,"flexWrap":"wrap"})]),
-        ], style={"marginTop":16})
+                                 style={"fontSize": 12, "color": T3, "marginTop": 6}),
+                    ], style={"flex": "0 0 200px"}),
+                    html.Div(comp_rows, style={"flex": "1", "marginLeft": 40}),
+                ], style={"display": "flex", "alignItems": "flex-start"}),
+            ], {"marginBottom": 16}),
+            card([ctitle(f"SCORE PAR MARCHÉ · {len(show_markets)} MARCHÉ{'S' if len(show_markets) > 1 else ''}"),
+                  html.Div(mcards, style={"display": "flex", "gap": 16, "flexWrap": "wrap"})]),
+        ], style={"marginTop": 16})
 
     # ── TAB: Prompts ──────────────────────────
     def _tab_prompts(lang):
         prompts = load_prompts(db_path, brand, lang, limit=30)
         if not prompts:
-            return card([html.Div("Pas de données.", style={"color":T3,"fontSize":12})])
+            return card([html.Div("Pas de données.", style={"color": T3, "fontSize": 12})])
         rows = []
         for p in prompts:
-            sc = round(p["score"]); col = score_color(sc)
+            sc = round(p["score"])
+            col = score_color(sc)
             rows.append(html.Tr([
-                html.Td(html.Span(CAT_LABELS.get(p["category"],p["category"]),
-                    style={**badge_style(col),"fontSize":10}), style={"padding":"10px 12px"}),
-                html.Td(LANG_FLAGS.get(p["language"],""), style={"padding":"10px 8px","fontSize":14}),
-                html.Td(p["text"], style={"padding":"10px 12px","fontSize":12,"color":T2}),
-                html.Td(str(sc), style={"padding":"10px 12px","fontWeight":800,"color":col,"fontSize":14,"textAlign":"center"}),
-            ], style={"borderBottom":f"1px solid {BD}"}))
-        return card([ctitle("ANALYSE PAR PROMPT — du plus faible au plus fort"),
-            dbc.Table([html.Thead(html.Tr([
-                *[html.Th(h, style={"fontSize":10,"fontWeight":700,"letterSpacing":"1.5px",
-                    "textTransform":"uppercase","color":T3,"padding":"8px 12px","background":BG})
-                  for h in ["Catégorie","","Prompt","Score"]]]),
-                style={"borderBottom":f"2px solid {BD}"}),
-                html.Tbody(rows)], bordered=False, hover=False, style={"fontFamily":FONT_BODY})
-        ], {"marginTop":16})
+                html.Td(html.Span(CAT_LABELS.get(p["category"], p["category"]),
+                                  style={**badge_style(col), "fontSize": 10}),
+                        style={"padding": "10px 12px"}),
+                html.Td(LANG_FLAGS.get(p["language"], ""),
+                        style={"padding": "10px 8px", "fontSize": 14}),
+                html.Td(p["text"],
+                        style={"padding": "10px 12px", "fontSize": 12, "color": T2}),
+                html.Td(str(sc),
+                        style={"padding": "10px 12px", "fontWeight": 700, "color": col,
+                               "fontSize": 14, "textAlign": "center"}),
+            ], style={"borderBottom": f"0.5px solid {BD}"}))
+        return card([
+            ctitle("ANALYSE PAR PROMPT — du plus faible au plus fort"),
+            dbc.Table([
+                html.Thead(html.Tr([
+                    *[html.Th(h, style={"fontSize": 10, "fontWeight": 600,
+                                        "letterSpacing": "1.5px", "textTransform": "uppercase",
+                                        "color": T3, "padding": "8px 12px", "background": BG})
+                      for h in ["Catégorie", "", "Prompt", "Score"]]
+                ]), style={"borderBottom": f"1px solid {BD}"}),
+                html.Tbody(rows)
+            ], bordered=False, hover=False, style={"fontFamily": FONT_BODY})
+        ], {"marginTop": 16})
 
     # ── TAB: Bibliothèque ─────────────────────
     def _tab_library(lang):
         prompts = load_prompts(db_path, brand, lang, limit=50)
         if not prompts:
-            return card([html.Div("Pas de données.", style={"color":T3,"fontSize":12})])
+            return card([html.Div("Pas de données.", style={"color": T3, "fontSize": 12})])
         cats = {}
         for p in prompts:
-            cats.setdefault(CAT_LABELS.get(p["category"],p["category"]), []).append(p)
+            cats.setdefault(CAT_LABELS.get(p["category"], p["category"]), []).append(p)
         blocks = []
         for cat, ps in cats.items():
-            items = [html.Li(f"{LANG_FLAGS.get(p['language'],'')} {p['text']}",
-                style={"fontSize":12,"color":T2,"marginBottom":6,"listStyle":"none","paddingLeft":8,
-                       "borderLeft":f"2px solid {score_color(round(p['score']))}"}) for p in ps]
+            items = [html.Li(f"{LANG_FLAGS.get(p['language'], '')} {p['text']}",
+                             style={"fontSize": 12, "color": T2, "marginBottom": 6,
+                                    "listStyle": "none", "paddingLeft": 8,
+                                    "borderLeft": f"2px solid {score_color(round(p['score']))}"})
+                     for p in ps]
             blocks.append(html.Div([
-                html.Div(cat.upper(), style={"fontSize":10,"fontWeight":700,"color":T3,"letterSpacing":"2px","marginBottom":10}),
-                html.Ul(items, style={"padding":0,"margin":0})], style={"marginBottom":20}))
-        return card([ctitle("BIBLIOTHÈQUE PROMPTS"), *blocks], {"marginTop":16})
+                html.Div(cat.upper(),
+                         style={"fontSize": 10, "fontWeight": 600, "color": T3,
+                                "letterSpacing": "1.5px", "marginBottom": 10}),
+                html.Ul(items, style={"padding": 0, "margin": 0})
+            ], style={"marginBottom": 20}))
+        return card([ctitle("BIBLIOTHÈQUE PROMPTS"), *blocks], {"marginTop": 16})
 
     # ── Export CSV ────────────────────────────
     @app.server.route(f"/export/csv")
@@ -902,12 +1014,14 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
             return Response("Pas de données", mimetype="text/plain")
         out = io.StringIO()
         w = csv.writer(out)
-        w.writerow(["Marque","Score","Mention%","Fréquence","Primaire"])
+        w.writerow(["Marque", "Score", "Mention%", "Fréquence", "Primaire"])
         for _, r in df.iterrows():
-            w.writerow([r["name"], round(r["score"]), round(r.get("mention_rate",0)*100),
-                        round(r.get("freq",0),1), bool(r["is_primary"])])
+            w.writerow([r["name"], round(r["score"]),
+                        round(r.get("mention_rate", 0) * 100),
+                        round(r.get("freq", 0), 1), bool(r["is_primary"])])
         return Response(out.getvalue(), mimetype="text/csv",
-            headers={"Content-Disposition": f"attachment;filename=voxa_{slug}_{lang or 'all'}_{date.today()}.csv"})
+                        headers={"Content-Disposition":
+                                 f"attachment;filename=voxa_{slug}_{lang or 'all'}_{date.today()}.csv"})
 
     return app
 
@@ -915,10 +1029,9 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
 # ─────────────────────────────────────────────
 # CLI
 # ─────────────────────────────────────────────
-
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Voxa Dashboard Générique v2")
+    parser = argparse.ArgumentParser(description="Voxa Dashboard Générique v2.1")
     parser.add_argument("--slug", required=True)
     parser.add_argument("--port", type=int, default=8051)
     args = parser.parse_args()

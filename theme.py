@@ -454,6 +454,77 @@ button:not(.btn):not(.voxa-nav-item):hover {{
 .voxa-nav-item.active:hover {{
   background: #006B7A !important;
 }}
+
+/* ── LAYOUT HORIZONTAL : sidebar + content ────────────────── */
+.voxa-app {{
+  display: flex;
+  min-height: calc(100vh - 56px);
+  background: {BG};
+}}
+.voxa-sidebar {{
+  width: 200px;
+  flex-shrink: 0;
+  padding: 16px 12px;
+  background: {BG};
+  border-right: 0.5px solid {BD};
+}}
+.voxa-content {{
+  flex: 1;
+  background: {BG};
+  min-width: 0;
+}}
+
+/* dbc.Tabs en mode vertical (transformé en sidebar) */
+.voxa-sidebar .nav-tabs {{
+  flex-direction: column !important;
+  border-bottom: none !important;
+  border-right: none !important;
+}}
+.voxa-sidebar .nav-tabs .nav-link {{
+  width: 100%;
+  text-align: left;
+  border: none !important;
+  border-bottom: none !important;
+  border-radius: 6px !important;
+  padding: 8px 12px !important;
+  margin-bottom: 2px;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: {T2} !important;
+  font-family: {FONT_BODY} !important;
+}}
+.voxa-sidebar .nav-tabs .nav-link:hover {{
+  background: {BG2} !important;
+  color: {W} !important;
+}}
+.voxa-sidebar .nav-tabs .nav-link.active {{
+  background: {C1} !important;
+  color: #FFFFFF !important;
+  border: none !important;
+  border-bottom: none !important;
+}}
+
+/* Filter bar compact horizontal */
+.voxa-filter-bar {{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 28px;
+  background: {BG};
+  border-bottom: 0.5px solid {BD};
+  position: sticky;
+  top: 56px;
+  z-index: 999;
+}}
+.voxa-filter-bar .form-check-inline {{
+  margin-right: 4px !important;
+}}
+.voxa-filter-bar .form-check-label {{
+  font-size: 12px !important;
+  color: {T2} !important;
+}}
 </style>"""
 
 # ─────────────────────────────────────────────────────────────
