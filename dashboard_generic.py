@@ -41,6 +41,13 @@ from theme import (P, C1, C2, NG, BG, BG2, BG3, BD, BD2, W, T2, T3, RED, GRD,
 
 BASE_DIR = Path(__file__).parent.resolve()
 
+# ─────────────────────────────────────────────
+# Recommandations : ne se basent que sur les runs UI (≥ 1er mai 2026)
+# Les runs antérieures (API) restent visibles dans le dashboard pour les
+# scores agrégés, mais ne contribuent pas aux recommandations actionnables.
+# ─────────────────────────────────────────────
+RECO_CUTOFF_DATE = "2026-05-01"
+
 
 # ─────────────────────────────────────────────
 # DB HELPERS (génériques)
@@ -63,11 +70,25 @@ def _conn(db_path: str) -> sqlite3.Connection:
     return conn
 
 
-def load_scores(db_path: str, language: str = None) -> pd.DataFrame:
+def load_scores(db_path: str, language: str = None,
+                since_date: str = None) -> pd.DataFrame:
+    """Charge les scores agrégés par marque.
+
+    Args:
+        since_date: si fourni (ex: '2026-05-01'), ne considère que les runs
+                     >= cette date. Utilisé par les recommandations pour ne se
+                     baser que sur les données UI réelles (post-bascule).
+    """
     conn = _conn(db_path)
     try:
         where = "AND p.language = ?" if language and language != "all" else ""
         params = [language] if language and language != "all" else []
+
+        date_filter = ""
+        if since_date:
+            date_filter = "AND ru.run_date >= ?"
+            params = params + [since_date]
+
         rows = conn.execute(f"""
             SELECT b.name, b.is_primary, AVG(r.geo_score) as score,
                    AVG(r.mentioned) as mention_rate, AVG(r.mention_count) as freq
@@ -76,7 +97,7 @@ def load_scores(db_path: str, language: str = None) -> pd.DataFrame:
             JOIN brands b ON r.brand_id = b.id
             JOIN prompts p ON ru.prompt_id = p.id
             WHERE ru.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)
-              AND ru.is_demo = 0 {where}
+              AND ru.is_demo = 0 {where} {date_filter}
             GROUP BY b.id ORDER BY score DESC
         """, params).fetchall()
         if not rows:
@@ -87,7 +108,7 @@ def load_scores(db_path: str, language: str = None) -> pd.DataFrame:
                 JOIN runs ru ON r.run_id = ru.id
                 JOIN brands b ON r.brand_id = b.id
                 JOIN prompts p ON ru.prompt_id = p.id
-                WHERE ru.run_date = (SELECT MAX(run_date) FROM runs) {where}
+                WHERE ru.run_date = (SELECT MAX(run_date) FROM runs) {where} {date_filter}
                 GROUP BY b.id ORDER BY score DESC
             """, params).fetchall()
     finally:
@@ -95,11 +116,23 @@ def load_scores(db_path: str, language: str = None) -> pd.DataFrame:
     return pd.DataFrame([dict(r) for r in rows]) if rows else pd.DataFrame()
 
 
-def load_scores_by_category(db_path: str, brand: str, language: str = None) -> dict:
+def load_scores_by_category(db_path: str, brand: str, language: str = None,
+                              since_date: str = None) -> dict:
+    """Charge les scores moyens par catégorie de prompt.
+
+    Args:
+        since_date: si fourni, filtre les runs >= cette date.
+    """
     conn = _conn(db_path)
     try:
         where_lang = "AND p.language = ?" if language and language != "all" else ""
         params = [brand] + ([language] if language and language != "all" else [])
+
+        date_filter = ""
+        if since_date:
+            date_filter = "AND ru.run_date >= ?"
+            params = params + [since_date]
+
         rows = conn.execute(f"""
             SELECT p.category, AVG(r.geo_score) as score
             FROM results r
@@ -108,7 +141,7 @@ def load_scores_by_category(db_path: str, brand: str, language: str = None) -> d
             JOIN prompts p ON ru.prompt_id = p.id
             WHERE b.name = ? AND ru.is_demo = 0
               AND ru.run_date = (SELECT MAX(run_date) FROM runs WHERE is_demo=0)
-              {where_lang}
+              {where_lang} {date_filter}
             GROUP BY p.category
         """, params).fetchall()
     finally:
@@ -143,11 +176,28 @@ def load_history(db_path: str, brand: str, n_weeks: int = 90, lang: str = None) 
     return [dict(r) for r in rows]
 
 
-def load_prompts(db_path: str, brand: str, language: str = None, limit: int = 20) -> list:
+def load_prompts(db_path: str, brand: str, language: str = None,
+                  limit: int = 20, since_date: str = None) -> list:
+    """Charge les prompts avec leur score moyen pour une marque.
+
+    Args:
+        since_date: si fourni, filtre les runs >= cette date.
+    """
     conn = _conn(db_path)
     try:
         where = "AND p.language = ?" if language and language != "all" else ""
-        params = [brand] + ([language] if language and language != "all" else []) + [limit]
+
+        date_filter = ""
+        date_params = []
+        if since_date:
+            date_filter = "AND ru.run_date >= ?"
+            date_params = [since_date]
+
+        params = ([brand]
+                  + ([language] if language and language != "all" else [])
+                  + date_params
+                  + [limit])
+
         rows = conn.execute(f"""
             SELECT p.text, p.category, p.language,
                    AVG(r.geo_score) as score, AVG(r.mentioned) as mention
@@ -155,7 +205,7 @@ def load_prompts(db_path: str, brand: str, language: str = None, limit: int = 20
             JOIN runs ru ON r.run_id = ru.id
             JOIN brands b ON r.brand_id = b.id
             JOIN prompts p ON ru.prompt_id = p.id
-            WHERE b.name = ? AND ru.is_demo = 0 {where}
+            WHERE b.name = ? AND ru.is_demo = 0 {where} {date_filter}
             GROUP BY p.id ORDER BY score ASC LIMIT ?
         """, params).fetchall()
         if not rows:
@@ -165,7 +215,7 @@ def load_prompts(db_path: str, brand: str, language: str = None, limit: int = 20
                 FROM results r JOIN runs ru ON r.run_id = ru.id
                 JOIN brands b ON r.brand_id = b.id
                 JOIN prompts p ON ru.prompt_id = p.id
-                WHERE b.name = ? {where}
+                WHERE b.name = ? {where} {date_filter}
                 GROUP BY p.id ORDER BY score ASC LIMIT ?
             """, params).fetchall()
     finally:
@@ -240,10 +290,18 @@ def load_gap_analysis(db_path: str, language: str = None) -> pd.DataFrame:
 # RECOMMENDATIONS ENGINE
 # ─────────────────────────────────────────────
 def generate_recommendations(db_path, brand, vertical, language=None, cat_labels=None):
+    """Génère les recommandations pour le tab Insights.
+
+    IMPORTANT : ne se base que sur les runs >= RECO_CUTOFF_DATE (1er mai 2026),
+    c'est-à-dire les runs UI réelles (post-bascule). Les anciennes runs API
+    sont visibles dans les autres vues (KPI, classement, évolution) mais ne
+    contribuent pas aux recommandations actionnables.
+    """
     recos = []
     cat_labels = cat_labels or {}
 
-    cat_scores = load_scores_by_category(db_path, brand, language)
+    cat_scores = load_scores_by_category(db_path, brand, language,
+                                          since_date=RECO_CUTOFF_DATE)
     if cat_scores:
         worst_cat = min(cat_scores, key=cat_scores.get)
         best_cat = max(cat_scores, key=cat_scores.get)
@@ -257,7 +315,7 @@ def generate_recommendations(db_path, brand, vertical, language=None, cat_labels
                           "title": f"Faible score en {cat_labels.get(worst_cat, worst_cat)} : {cat_scores[worst_cat]}/100",
                           "body": f"Les LLMs ne citent quasiment pas {brand} sur ces requêtes. Angle mort à combler."})
 
-    df_all = load_scores(db_path, language)
+    df_all = load_scores(db_path, language, since_date=RECO_CUTOFF_DATE)
     if not df_all.empty:
         pr = df_all[df_all["name"] == brand]
         if not pr.empty:
@@ -273,7 +331,8 @@ def generate_recommendations(db_path, brand, vertical, language=None, cat_labels
                               "title": f"{brand} #1 — position dominante",
                               "body": f"Leader GEO avec {round(pr['score'].values[0])}/100. Maintenir via monitoring hebdomadaire."})
 
-    absent_prompts = load_prompts(db_path, brand, language, limit=50)
+    absent_prompts = load_prompts(db_path, brand, language, limit=50,
+                                    since_date=RECO_CUTOFF_DATE)
     if absent_prompts:
         absent = [p for p in absent_prompts if p.get("mention", 0) < 0.5]
         if absent:
@@ -285,7 +344,7 @@ def generate_recommendations(db_path, brand, vertical, language=None, cat_labels
     if not recos:
         recos.append({"priority": "info", "icon": "✓",
                       "title": "Bonne performance globale",
-                      "body": f"{brand} affiche de bons scores. Continuer le monitoring."})
+                      "body": f"{brand} affiche de bons scores depuis le {RECO_CUTOFF_DATE}. Continuer le monitoring."})
 
     return recos
 
