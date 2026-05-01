@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
+
+# Crawlers — sessions et outputs locaux
+crawlers/sessions/
+crawlers/screenshots/
