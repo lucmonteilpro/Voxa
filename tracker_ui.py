@@ -1,49 +1,56 @@
 """
-Voxa — Tracker UI (Perplexity headed)
-======================================
+Voxa — Tracker UI v2 (Perplexity headed)
+=========================================
 Tracker en mode UI qui interroge Perplexity via le navigateur (vs API).
 Réutilise toute la logique de scoring de tracker.py pour garantir la
 cohérence des données avec l'historique.
 
-Différences vs tracker.py :
-- Pas d'API key requise (login Perplexity manuel persistant)
+Nouveautés v2 (vs v1) :
+- Mode --all-markets : enchaîne FR → PT → FR-CI → PL automatiquement
+- Idempotence : skip les prompts déjà crawlés aujourd'hui (même date calendaire)
+- Resume après coupure : relance la commande, ça reprend où ça s'était arrêté
+- ETA dynamique : projette la fin du run basé sur la durée moyenne par prompt
+- Gestion gracieuse erreurs : ne s'arrête plus sur une query qui plante
+- Logs verbeux : timestamp + alertes sur durées anormales
+- Stats globales : par marché + cumulées + sources collectées + domaines top
+
+Différences vs tracker.py (API) :
+- Pas d'API key requise (login Perplexity manuel persistant via cookies)
 - Réponses = celles vues réellement par les utilisateurs (pas API stub)
 - Sources web réelles capturées + screenshot pour audit
 - Stocke dans les nouvelles colonnes (screenshot_path, crawl_duration_ms, crawl_method='ui')
 - Insère les sources dans la table `sources` (jointe à `runs`)
 
-Compatibilité :
+Compatibilité dashboard :
 - Réutilise sync_brands, sync_prompts, init_db de tracker.py
 - Réutilise parse_response (donc compute_geo_score, detect_sentiment, detect_position)
 - Les runs UI apparaissent dans le dashboard à côté des runs API existants
 - Distinction via `runs.crawl_method` ('api' pour anciens, 'ui' pour nouveaux)
 
 Usage :
-    # Run sur 5 prompts FR pour tester
-    python3 tracker_ui.py --slug betclic --language fr --limit 5
-
-    # Run complet sur un marché
-    python3 tracker_ui.py --slug betclic --language fr
-
-    # Run complet sur tous les marchés (long, ~25min/marché)
-    python3 tracker_ui.py --slug betclic
-
-    # Mode dry-run : crawl sans écrire en DB (pour debug)
+    # Test minimal sur 3 prompts FR
     python3 tracker_ui.py --slug betclic --language fr --limit 3 --dry-run
 
-Workflow recommandé :
-1. D'abord --limit 3 --dry-run pour vérifier que ça crawl correctement
-2. Puis --limit 5 sans dry-run pour vérifier que ça écrit en DB
-3. Puis --language fr (un marché complet, ~25min)
-4. Puis sans --language (tous les marchés, plusieurs heures)
+    # Run complet sur 1 marché (~25 min, ~22 prompts)
+    python3 tracker_ui.py --slug betclic --language fr
+
+    # Run complet sur tous les marchés (~2h, ~80 prompts)
+    python3 tracker_ui.py --slug betclic --all-markets
+
+    # Force le re-crawl même si déjà fait aujourd'hui
+    python3 tracker_ui.py --slug betclic --language fr --force
+
+    # Mode dry-run : crawl sans écrire en DB (debug)
+    python3 tracker_ui.py --slug betclic --language fr --limit 3 --dry-run
 """
 
 import argparse
 import random
-import sys
 import sqlite3
+import sys
 import time
-from datetime import date, datetime
+from collections import Counter
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -59,16 +66,53 @@ from tracker import (
 from crawlers.perplexity import PerplexityCrawler
 from crawlers.base import CrawlerResult
 
+
 # ─────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent.resolve()
 
 # Délais entre prompts (anti-rate-limit + détection bot)
-DELAY_MIN_S = 8       # minimum entre 2 prompts
-DELAY_MAX_S = 15      # maximum entre 2 prompts
-LONG_PAUSE_EVERY = 20 # toutes les N prompts → pause longue
-LONG_PAUSE_S = 60     # durée pause longue
+DELAY_MIN_S = 8
+DELAY_MAX_S = 15
+LONG_PAUSE_EVERY = 20      # toutes les N prompts → pause longue
+LONG_PAUSE_S = 60
+
+# Pause inter-marchés (pour le mode --all-markets)
+BETWEEN_MARKETS_PAUSE_S = 90
+
+# Alerte si une query prend plus de N secondes (signal de problème)
+ALERT_DURATION_MS = 60_000
+
+# Ordre d'exécution des marchés en mode --all-markets
+ALL_MARKETS_ORDER = ["fr", "pt", "fr-ci", "pl"]
+
+
+# ─────────────────────────────────────────────
+# IDEMPOTENCE
+# ─────────────────────────────────────────────
+def get_prompts_already_crawled_today(conn: sqlite3.Connection,
+                                       language: Optional[str] = None) -> set:
+    """Retourne l'ensemble des prompt_id déjà crawlés en mode UI aujourd'hui.
+
+    "Aujourd'hui" = même date calendaire (pas 24h glissantes).
+    On filtre sur run_date pour le jour, ET sur crawl_method='ui'.
+    """
+    today = date.today().isoformat()
+    if language:
+        rows = conn.execute("""
+            SELECT DISTINCT prompt_id FROM runs
+            WHERE crawl_method = 'ui'
+              AND DATE(created_at) = ?
+              AND language = ?
+        """, (today, language)).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT DISTINCT prompt_id FROM runs
+            WHERE crawl_method = 'ui'
+              AND DATE(created_at) = ?
+        """, (today,)).fetchall()
+    return {row["prompt_id"] for row in rows}
 
 
 # ─────────────────────────────────────────────
@@ -99,7 +143,7 @@ def insert_run_with_ui_metadata(conn: sqlite3.Connection,
         datetime.now().isoformat(),
         result.screenshot_path,
         result.crawl_duration_ms,
-        "ui",  # crawl_method = UI (vs 'api' pour les anciens)
+        "ui",
     ))
     run_id = c.lastrowid
     conn.commit()
@@ -135,7 +179,7 @@ def insert_results_for_brands(conn: sqlite3.Connection,
 def insert_sources(conn: sqlite3.Connection,
                     run_id: int,
                     sources: list) -> int:
-    """Insert les sources URL citées dans la nouvelle table `sources`.
+    """Insert les sources URL citées dans la table `sources`.
 
     Retourne le nombre de sources insérées.
     """
@@ -144,18 +188,12 @@ def insert_sources(conn: sqlite3.Connection,
     c = conn.cursor()
     n = 0
     for src in sources:
-        # src est un CrawlerSource dataclass
         c.execute("""
             INSERT INTO sources
             (run_id, url, title, domain, position, snippet)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (
-            run_id,
-            src.url,
-            src.title,
-            src.domain,
-            src.position,
-            src.snippet,
+            run_id, src.url, src.title, src.domain, src.position, src.snippet
         ))
         n += 1
     conn.commit()
@@ -165,29 +203,59 @@ def insert_sources(conn: sqlite3.Connection,
 # ─────────────────────────────────────────────
 # Affichage console
 # ─────────────────────────────────────────────
-def print_header(slug: str, language: Optional[str], n_prompts: int, dry_run: bool):
+def now_hms() -> str:
+    """Timestamp HH:MM:SS pour les logs."""
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def format_duration(seconds: float) -> str:
+    """Formatte une durée en string lisible."""
+    if seconds < 60:
+        return f"{seconds:.0f}s"
+    minutes = seconds / 60
+    if minutes < 60:
+        return f"{minutes:.1f}min"
+    hours = minutes / 60
+    return f"{hours:.1f}h"
+
+
+def print_header(slug: str, mode: str, n_prompts: int,
+                  dry_run: bool, force: bool, n_skipped: int):
     print("\n" + "═" * 70)
-    print(f"  VOXA — UI Tracker (Perplexity headed)")
-    print(f"  Client    : {slug}")
-    print(f"  Marchés   : {language.upper() if language else 'TOUS'}")
-    print(f"  Prompts   : {n_prompts}")
-    print(f"  Mode      : {'🔍 DRY-RUN (pas d écriture DB)' if dry_run else '💾 LIVE (DB)'}")
-    print(f"  Date      : {date.today()}")
+    print(f"  VOXA — UI Tracker v2 (Perplexity headed)")
+    print(f"  Client     : {slug}")
+    print(f"  Mode       : {mode}")
+    print(f"  Prompts    : {n_prompts} à crawler"
+          + (f" ({n_skipped} skip car déjà fait aujourd'hui)" if n_skipped else ""))
+    print(f"  Persistence: {'🔍 DRY-RUN (pas d écriture DB)' if dry_run else '💾 LIVE (DB)'}")
+    print(f"  Idempotence: {'❌ FORCE (re-crawl tout)' if force else '✓ Skip si déjà fait aujourd hui'}")
+    print(f"  Date       : {date.today()}")
+    print(f"  Heure      : {now_hms()}")
     print("═" * 70 + "\n")
 
 
 def print_progress(idx: int, total: int, lang: str, prompt_text: str,
-                    result: CrawlerResult, parsed: dict, n_sources: int):
-    """Affiche le résultat d'une query en console."""
+                    result: CrawlerResult, parsed: dict, n_sources: int,
+                    eta_minutes: Optional[float] = None):
     flag = LANGUAGE_LABELS.get(lang, lang)
     primary = parsed.get(PRIMARY_BRAND, {})
     status = "✓" if primary.get("mentioned") else "✗"
 
-    print(f"\n[{idx:02d}/{total}] [{flag}] {prompt_text[:60]}")
+    eta_str = f" · ETA: ~{eta_minutes:.0f}min" if eta_minutes else ""
+
+    print(f"\n[{idx:02d}/{total}] [{now_hms()}] [{flag}]{eta_str}")
+    print(f"   {prompt_text[:70]}")
+
     if result.error:
         print(f"   ⚠ ERREUR : {result.error}")
         return
-    print(f"   ⏱  {result.crawl_duration_ms}ms  ·  "
+
+    # Alerte si durée anormalement longue
+    duration_warn = ""
+    if result.crawl_duration_ms and result.crawl_duration_ms > ALERT_DURATION_MS:
+        duration_warn = " ⚠"
+
+    print(f"   ⏱  {result.crawl_duration_ms}ms{duration_warn}  ·  "
           f"📝 {len(result.response_text)} chars  ·  "
           f"🔗 {n_sources} sources")
     print(f"   {status} {PRIMARY_BRAND} — mentions: {primary.get('mention_count', 0)} | "
@@ -196,33 +264,170 @@ def print_progress(idx: int, total: int, lang: str, prompt_text: str,
           f"score: {primary.get('geo_score', 0)}")
 
 
-def print_summary(stats: dict):
+def print_market_summary(language: str, stats: dict):
+    """Récap d'1 marché à la fin de son passage."""
+    flag = LANGUAGE_LABELS.get(language, language)
+    print("\n" + "─" * 70)
+    print(f"  Récap marché {flag}")
+    print("─" * 70)
+    print(f"   Prompts      : {stats['success']}/{stats['total']} succès"
+          f" ({stats['skipped']} skip, {stats['failed']} erreurs)")
+    if stats['success']:
+        print(f"   Mentions     : {stats['mentioned']}/{stats['success']}"
+              f" ({stats['mentioned'] * 100 // stats['success']}%)")
+        avg = sum(stats['scores']) / len(stats['scores']) if stats['scores'] else 0
+        print(f"   Score moyen  : {avg:.1f}/100")
+    print(f"   Sources      : {stats['total_sources']} URLs collectées")
+    print(f"   Durée        : {format_duration(stats['duration_s'])}")
+
+
+def print_global_summary(global_stats: dict):
+    """Récap final tous marchés confondus."""
     print("\n" + "═" * 70)
-    print(f"  RÉCAPITULATIF")
+    print(f"  RÉCAPITULATIF GLOBAL [{now_hms()}]")
     print("═" * 70)
-    print(f"  Prompts traités    : {stats['total']}")
-    print(f"  Succès             : {stats['success']}")
-    print(f"  Échecs             : {stats['failed']}")
-    print(f"  Mentions {PRIMARY_BRAND}     : {stats['mentioned']}/{stats['success']}")
-    print(f"  Score moyen {PRIMARY_BRAND}: {stats['avg_score']:.1f}/100")
-    print(f"  Sources collectées : {stats['total_sources']}")
-    print(f"  Durée totale       : {stats['duration_min']:.1f} min")
+    print(f"  Marchés traités    : {len(global_stats['markets'])}")
+    print(f"  Prompts crawlés    : {global_stats['success']}/{global_stats['total']}")
+    print(f"  Skipped (dédup)    : {global_stats['skipped']}")
+    print(f"  Erreurs            : {global_stats['failed']}")
+    if global_stats['scores']:
+        avg = sum(global_stats['scores']) / len(global_stats['scores'])
+        print(f"  Score moyen {PRIMARY_BRAND} : {avg:.1f}/100")
+    print(f"  Mentions {PRIMARY_BRAND}    : "
+          f"{global_stats['mentioned']}/{global_stats['success']} "
+          f"({global_stats['mentioned'] * 100 // max(global_stats['success'], 1)}%)")
+    print(f"  Sources collectées : {global_stats['total_sources']} URLs")
+
+    # Top 10 domaines cités
+    if global_stats['domain_counts']:
+        print(f"\n  Top 10 domaines cités par Perplexity :")
+        for domain, count in global_stats['domain_counts'].most_common(10):
+            print(f"    {count:3d}× {domain}")
+
+    print(f"\n  Durée totale       : {format_duration(global_stats['duration_s'])}")
     print("═" * 70 + "\n")
 
 
 # ─────────────────────────────────────────────
-# Filtre prompts
+# Crawl d'un marché unique
 # ─────────────────────────────────────────────
-def filter_prompts(all_prompts: list,
-                    language_filter: Optional[str],
-                    limit: Optional[int]) -> list:
-    """Filtre la liste des prompts selon language et limit."""
-    filtered = all_prompts
-    if language_filter:
-        filtered = [p for p in filtered if p["language"] == language_filter]
-    if limit:
-        filtered = filtered[:limit]
-    return filtered
+def crawl_market(crawler: PerplexityCrawler,
+                  conn: sqlite3.Connection,
+                  prompts: list,
+                  language: str,
+                  brand_ids: dict,
+                  dry_run: bool,
+                  force: bool,
+                  global_idx_start: int = 0,
+                  global_total: int = 0) -> dict:
+    """Crawl tous les prompts d'un marché donné.
+
+    Retourne stats du marché.
+    """
+    stats = {
+        "total": len(prompts),
+        "success": 0, "failed": 0, "skipped": 0,
+        "mentioned": 0,
+        "scores": [],
+        "total_sources": 0,
+        "domains": Counter(),
+        "duration_s": 0.0,
+    }
+    market_start = time.time()
+
+    # Récupère les prompts déjà crawlés aujourd'hui (sauf si --force)
+    already_done = set() if force else get_prompts_already_crawled_today(conn, language)
+    if already_done and not force:
+        print(f"\n[{language}] {len(already_done)} prompts déjà crawlés aujourd'hui, skip\n")
+
+    # Durées par prompt pour calcul ETA
+    durations_ms = []
+
+    market_total = len(prompts)
+    for i, prompt in enumerate(prompts, start=1):
+        # Idempotence : skip si déjà crawlé aujourd'hui
+        if prompt["id"] in already_done:
+            stats["skipped"] += 1
+            continue
+
+        # Calcul ETA basé sur la durée moyenne des prompts précédents
+        eta_minutes = None
+        if durations_ms:
+            avg_ms = sum(durations_ms) / len(durations_ms)
+            remaining = market_total - i + 1
+            # Inclut le délai entre prompts (~12s en moyenne)
+            eta_seconds = remaining * (avg_ms / 1000 + 12)
+            # Ajoute pause longue si applicable
+            n_long_pauses = (remaining // LONG_PAUSE_EVERY)
+            eta_seconds += n_long_pauses * LONG_PAUSE_S
+            eta_minutes = eta_seconds / 60
+
+        # Crawl
+        try:
+            result = crawler.query(prompt["text"], language=language)
+        except Exception as e:
+            print(f"\n[{i:02d}/{market_total}] [{now_hms()}] ⚠ EXCEPTION inattendue")
+            print(f"   Prompt : {prompt['text'][:60]}")
+            print(f"   Erreur : {type(e).__name__}: {e}")
+            stats["failed"] += 1
+            continue
+
+        if not result.is_success:
+            stats["failed"] += 1
+            print_progress(i, market_total, language, prompt["text"],
+                          result, {}, 0, eta_minutes)
+            continue
+
+        # Parse de la réponse
+        parsed = parse_response(result.response_text, language)
+
+        # Liste des marques à insérer
+        competitors = COMPETITORS_BY_MARKET.get(language, ALL_COMPETITORS)
+        brands_to_check = [PRIMARY_BRAND] + competitors
+
+        # Stats
+        primary = parsed.get(PRIMARY_BRAND, {})
+        if primary.get("mentioned"):
+            stats["mentioned"] += 1
+        stats["scores"].append(primary.get("geo_score", 0))
+        for src in result.sources:
+            if src.domain:
+                stats["domains"][src.domain] += 1
+
+        # Affichage
+        print_progress(i, market_total, language, prompt["text"],
+                      result, parsed, len(result.sources), eta_minutes)
+
+        # Persistence DB (sauf en dry-run)
+        if not dry_run:
+            try:
+                run_id = insert_run_with_ui_metadata(conn, prompt["id"], language, result)
+                insert_results_for_brands(conn, run_id, brand_ids, parsed, brands_to_check)
+                n_sources = insert_sources(conn, run_id, result.sources)
+                stats["total_sources"] += n_sources
+            except Exception as e:
+                print(f"   ⚠ Erreur DB : {e}")
+                # On continue malgré l'erreur DB (le crawl a marché)
+        else:
+            stats["total_sources"] += len(result.sources)
+
+        stats["success"] += 1
+        if result.crawl_duration_ms:
+            durations_ms.append(result.crawl_duration_ms)
+
+        # Délais anti-rate-limit
+        if i < market_total:
+            delay = random.uniform(DELAY_MIN_S, DELAY_MAX_S)
+            if i % LONG_PAUSE_EVERY == 0:
+                print(f"\n   ⏸  Pause longue ({LONG_PAUSE_S}s) toutes les "
+                      f"{LONG_PAUSE_EVERY} prompts...")
+                time.sleep(LONG_PAUSE_S)
+            else:
+                print(f"   💤 Pause {delay:.1f}s")
+                time.sleep(delay)
+
+    stats["duration_s"] = time.time() - market_start
+    return stats
 
 
 # ─────────────────────────────────────────────
@@ -230,102 +435,117 @@ def filter_prompts(all_prompts: list,
 # ─────────────────────────────────────────────
 def run_ui_tracker(slug: str,
                     language: Optional[str] = None,
+                    all_markets: bool = False,
                     limit: Optional[int] = None,
-                    dry_run: bool = False) -> None:
+                    dry_run: bool = False,
+                    force: bool = False) -> None:
     """Lance le tracker UI sur les prompts du slug donné."""
 
-    # ── 1) Setup DB & prompts (utilise les helpers de tracker.py) ──
+    # ── 1) Setup DB & prompts ──
     db_path = BASE_DIR / f"voxa_{slug}.db"
     if not db_path.exists():
         print(f"✗ DB introuvable : {db_path}")
-        print(f"  Lance d'abord 'python3 tracker.py' pour initialiser la DB Betclic.")
         sys.exit(1)
 
     conn = init_db(str(db_path))
-
-    # On utilise CLIENT_NAME = "Betclic" (hardcodé dans tracker.py)
-    # Le slug qu'on passe ne sert qu'à pointer la bonne DB
     from tracker import CLIENT_NAME
     client_id = get_or_create_client(conn, CLIENT_NAME)
     brand_ids = sync_brands(conn, client_id)
     all_prompts = sync_prompts(conn, client_id)
 
-    # Filtrage des prompts
-    prompts = filter_prompts(all_prompts, language, limit)
-    if not prompts:
-        print(f"✗ Aucun prompt trouvé pour language={language!r}, limit={limit}")
+    # ── 2) Détermine les marchés à traiter ──
+    if all_markets:
+        markets_to_process = ALL_MARKETS_ORDER
+        mode = f"📊 ALL MARKETS ({', '.join(m.upper() for m in ALL_MARKETS_ORDER)})"
+    elif language:
+        markets_to_process = [language]
+        mode = f"🎯 SINGLE MARKET ({language.upper()})"
+    else:
+        # Default : single market FR
+        markets_to_process = ["fr"]
+        mode = "🎯 SINGLE MARKET (FR par défaut)"
+
+    # Filtrage par limit (s'applique sur le total à travers tous les marchés)
+    market_prompts = {}
+    n_total = 0
+    n_skipped_idempotence = 0
+    for mkt in markets_to_process:
+        prompts = [p for p in all_prompts if p["language"] == mkt]
+        if limit:
+            prompts = prompts[:limit]
+        # Compte combien seront skip (sans modifier la liste)
+        if not force:
+            already = get_prompts_already_crawled_today(conn, mkt)
+            n_skipped_idempotence += sum(1 for p in prompts if p["id"] in already)
+        market_prompts[mkt] = prompts
+        n_total += len(prompts)
+
+    if n_total == 0:
+        print(f"✗ Aucun prompt trouvé. language={language!r}, all_markets={all_markets}, limit={limit}")
         conn.close()
         sys.exit(1)
 
-    print_header(slug, language, len(prompts), dry_run)
+    print_header(slug, mode, n_total, dry_run, force, n_skipped_idempotence)
 
-    # ── 2) Stats agrégées ──
-    stats = {
-        "total": 0, "success": 0, "failed": 0,
-        "mentioned": 0, "scores": [], "total_sources": 0,
-        "duration_min": 0.0,
+    # ── 3) Stats globales ──
+    global_stats = {
+        "markets": [],
+        "total": 0, "success": 0, "failed": 0, "skipped": 0,
+        "mentioned": 0,
+        "scores": [],
+        "total_sources": 0,
+        "domain_counts": Counter(),
+        "duration_s": 0.0,
     }
-    start_time = time.time()
+    global_start = time.time()
 
-    # ── 3) Boucle de crawl ──
+    # ── 4) Boucle de crawl par marché ──
     with PerplexityCrawler(headless=False) as crawler:
-        total = len(prompts)
-        for i, prompt in enumerate(prompts, start=1):
-            stats["total"] += 1
-            lang = prompt["language"]
-            txt = prompt["text"]
-
-            # Crawl
-            result = crawler.query(txt, language=lang)
-
-            if not result.is_success:
-                print(f"\n[{i:02d}/{total}] ⚠ ÉCHEC")
-                print(f"   Prompt : {txt[:60]}")
-                print(f"   Erreur : {result.error}")
-                stats["failed"] += 1
+        for mkt_idx, mkt in enumerate(markets_to_process):
+            prompts = market_prompts[mkt]
+            if not prompts:
                 continue
 
-            # Parse de la réponse pour extraire scores marques
-            parsed = parse_response(result.response_text, lang)
+            flag = LANGUAGE_LABELS.get(mkt, mkt)
+            print(f"\n{'═' * 70}")
+            print(f"  MARCHÉ {mkt_idx + 1}/{len(markets_to_process)} : {flag}")
+            print(f"{'═' * 70}")
 
-            # Liste des marques à insérer (primary + concurrents du marché)
-            competitors = COMPETITORS_BY_MARKET.get(lang, ALL_COMPETITORS)
-            brands_to_check = [PRIMARY_BRAND] + competitors
+            market_stats = crawl_market(
+                crawler=crawler,
+                conn=conn,
+                prompts=prompts,
+                language=mkt,
+                brand_ids=brand_ids,
+                dry_run=dry_run,
+                force=force,
+            )
+            print_market_summary(mkt, market_stats)
 
-            # Compteurs stats
-            primary = parsed.get(PRIMARY_BRAND, {})
-            if primary.get("mentioned"):
-                stats["mentioned"] += 1
-            stats["scores"].append(primary.get("geo_score", 0))
+            # Agrège dans global_stats
+            global_stats["markets"].append(mkt)
+            global_stats["total"] += market_stats["total"]
+            global_stats["success"] += market_stats["success"]
+            global_stats["failed"] += market_stats["failed"]
+            global_stats["skipped"] += market_stats["skipped"]
+            global_stats["mentioned"] += market_stats["mentioned"]
+            global_stats["scores"].extend(market_stats["scores"])
+            global_stats["total_sources"] += market_stats["total_sources"]
+            global_stats["domain_counts"].update(market_stats["domains"])
 
-            # Affichage
-            print_progress(i, total, lang, txt, result, parsed, len(result.sources))
-
-            # ── Persistence DB (sauf en dry-run) ──
-            if not dry_run:
-                run_id = insert_run_with_ui_metadata(conn, prompt["id"], lang, result)
-                insert_results_for_brands(conn, run_id, brand_ids, parsed, brands_to_check)
-                n_sources = insert_sources(conn, run_id, result.sources)
-                stats["total_sources"] += n_sources
-
-            stats["success"] += 1
-
-            # ── Délais anti-rate-limit ──
-            if i < total:
-                delay = random.uniform(DELAY_MIN_S, DELAY_MAX_S)
-                if i % LONG_PAUSE_EVERY == 0:
-                    print(f"\n   ⏸  Pause longue ({LONG_PAUSE_S}s) toutes les {LONG_PAUSE_EVERY} prompts...")
-                    time.sleep(LONG_PAUSE_S)
-                else:
-                    print(f"   💤 Pause {delay:.1f}s")
-                    time.sleep(delay)
+            # Pause inter-marchés (sauf après le dernier)
+            if mkt_idx < len(markets_to_process) - 1:
+                next_mkt = markets_to_process[mkt_idx + 1]
+                next_flag = LANGUAGE_LABELS.get(next_mkt, next_mkt)
+                print(f"\n   ⏸  Pause inter-marchés ({BETWEEN_MARKETS_PAUSE_S}s) "
+                      f"avant {next_flag}...")
+                time.sleep(BETWEEN_MARKETS_PAUSE_S)
 
     conn.close()
 
-    # ── 4) Résumé final ──
-    stats["avg_score"] = sum(stats["scores"]) / len(stats["scores"]) if stats["scores"] else 0
-    stats["duration_min"] = (time.time() - start_time) / 60
-    print_summary(stats)
+    # ── 5) Résumé final ──
+    global_stats["duration_s"] = time.time() - global_start
+    print_global_summary(global_stats)
 
 
 # ─────────────────────────────────────────────
@@ -333,25 +553,36 @@ def run_ui_tracker(slug: str,
 # ─────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(
-        description="Voxa Tracker UI — crawl Perplexity via navigateur",
+        description="Voxa Tracker UI v2 — crawl Perplexity via navigateur",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
     parser.add_argument("--slug", default="betclic",
                         help="Slug client (défaut : betclic)")
-    parser.add_argument("--language", choices=["fr", "pt", "fr-ci", "pl"],
-                        help="Filtrer sur 1 marché. Sinon tous les marchés.")
+
+    # Modes mutuellement exclusifs : --language XOR --all-markets
+    market_group = parser.add_mutually_exclusive_group()
+    market_group.add_argument("--language", choices=["fr", "pt", "fr-ci", "pl"],
+                               help="Crawler 1 marché spécifique")
+    market_group.add_argument("--all-markets", action="store_true",
+                               help="Crawler tous les marchés "
+                                    "(FR → PT → FR-CI → PL)")
+
     parser.add_argument("--limit", type=int,
                         help="Limiter à N prompts (utile pour tester)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Crawl sans écrire en DB")
+    parser.add_argument("--force", action="store_true",
+                        help="Force le re-crawl même si déjà fait aujourd hui")
     args = parser.parse_args()
 
     run_ui_tracker(
         slug=args.slug,
         language=args.language,
+        all_markets=args.all_markets,
         limit=args.limit,
         dry_run=args.dry_run,
+        force=args.force,
     )
 
 

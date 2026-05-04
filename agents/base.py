@@ -205,7 +205,19 @@ class Agent(ABC):
     # Internal : gestion de la table agent_runs
     # ─────────────────────────────────────────────
     def _resolve_db_path(self, slug: str) -> Path:
-        """Trouve le chemin DB pour le slug (réutilise voxa_db si dispo)."""
+        """Trouve (ou crée) le chemin DB pour le slug.
+
+        Stratégie en cascade :
+          1. voxa_db.CLIENTS_CONFIG[slug] si dispo
+          2. voxa_{slug}.db à la racine
+          3. voxa.db (alias historique pour psg)
+          4. Auto-création : si aucune DB n'existe pour ce slug, on crée
+             voxa_{slug}.db avec juste la table agent_runs.
+
+        L'auto-création (#4) permet aux agents sans données spécifiques
+        (ex: SEO Agent) de tourner sur n'importe quel slug, même avant
+        qu'on ait commencé à tracker ce client.
+        """
         try:
             import voxa_db as vdb
             cfg = vdb.CLIENTS_CONFIG.get(slug)
@@ -215,13 +227,57 @@ class Agent(ABC):
                     return db
         except Exception:
             pass
-        # Fallback
+
+        # Tentative directe par slug
         candidate = BASE_DIR / f"voxa_{slug}.db"
-        if not candidate.exists() and slug == "psg":
-            candidate = BASE_DIR / "voxa.db"
-        if not candidate.exists():
-            raise FileNotFoundError(f"DB introuvable pour slug='{slug}'")
-        return candidate
+        if candidate.exists():
+            return candidate
+
+        # Alias historique : voxa.db pour psg
+        if slug == "psg":
+            psg_db = BASE_DIR / "voxa.db"
+            if psg_db.exists():
+                return psg_db
+
+        # Auto-création d'une DB minimale pour ce slug
+        # (juste la table agent_runs nécessaire au logging)
+        return self._create_minimal_db(candidate)
+
+    def _create_minimal_db(self, db_path: Path) -> Path:
+        """Crée une DB SQLite minimale avec juste la table agent_runs.
+
+        Utilisé quand un agent tourne sur un slug pour lequel on n'a pas
+        encore de DB Voxa complète (typiquement : SEO Agent qui audite le
+        site d'un prospect avant qu'on ne configure son tracking).
+        """
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS agent_runs (
+                    id INTEGER PRIMARY KEY,
+                    agent_name TEXT NOT NULL,
+                    slug TEXT NOT NULL,
+                    language TEXT,
+                    status TEXT NOT NULL,
+                    input_json TEXT,
+                    output_json TEXT,
+                    error_msg TEXT,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    duration_ms INTEGER,
+                    iteration INTEGER DEFAULT 1,
+                    parent_run_id INTEGER,
+                    FOREIGN KEY (parent_run_id) REFERENCES agent_runs(id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_agent_runs_slug
+                    ON agent_runs(slug, agent_name, started_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_agent_runs_parent
+                    ON agent_runs(parent_run_id);
+            """)
+            conn.commit()
+        finally:
+            conn.close()
+        return db_path
 
     def _log_start(self, input_data: dict) -> None:
         """Insert une ligne dans agent_runs avec status='running'.
