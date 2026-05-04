@@ -198,7 +198,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 **Constat** : sur les 8098 mesures historiques, la variance LLM est élevée — ±24 pts sur 1 mesure, ±10 pts sur 5 mesures. Le Gap Analyzer actuel est basé sur 1 crawl par prompt.
 **Impact** : les angles morts détectés par le Gap Analyzer peuvent être des faux positifs/négatifs causés par la variance plutôt que par un vrai gap.
 **Mitigation actuelle** : Sonar 2 forcé devrait baisser fortement la variance (à valider sur 3 prompts × 3 crawls). Usage privilégié de la médiane plutôt que de la moyenne sur les analyses agrégées.
-**Action prévue** : re-test variance Sonar 2 (Phase 2 État détaillé 2E) → décision finale sur N (probablement 1-2 si Sonar 2 stable, sinon multi-crawl). Multi-crawl par défaut pour QC v2.
+**Action prévue** : ✅ multi-crawl N=3 + médiane livré dans QC v2 (04/05). Variance non-nulle confirmée empiriquement (item #6 Pack #2 Betclic : [100, 98, 0]). N=3 absorbe la variance, médiane sauve du faux négatif quantitatif. R2 partiellement mitigé — reste à étendre le multi-crawl au tracker_ui et au Gap Analyzer (sessions futures).
 
 ### R3 — Architecture cron Mac = single-point-of-failure
 
@@ -266,7 +266,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 |---|---|---|
 | **Phase 0** | Sprint Betclic — infra crawl + sync | 🟡 (déblocable maintenant, MDP PA OK) |
 | **Phase 1** | Démo Betclic prête | 🔄 |
-| **Phase 2** | Architecture multi-agents | 🟡 (5/8 ✅, 1 🧪) |
+| **Phase 2** | Architecture multi-agents | 🟡 (6/8 ✅, 0 🧪) |
 | **Phase 3** | Crawlers UI multi-LLMs | ⏳ |
 | **Phase 4** | Chatbot agentique sidebar | ⏳ |
 | **Phase 5** | Olivier's 5 besoins Betclic | 🔄 |
@@ -274,7 +274,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 | **Phase 7** | Pub ChatGPT US | ⏸ |
 | **Phase 8** | Voxa Politics | ⏳ |
 | **Phase 9** | Protocole control/test | ⏳ |
-| **Dette technique** | Tickets DT-1 à DT-4 | 🟡 (DT-2 closed) |
+| **Dette technique** | Tickets DT-1 à DT-5 | 🟡 (DT-2 et DT-3 closed) |
 
 ---
 
@@ -338,7 +338,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 - ✅ Refacto soft `action_pack.py`
 - ✅ **Crawler force toujours 1 modèle spécifique** (cf. Note 1)
 - ✅ **Filtre `llm = 'perplexity-sonar-2'`** dans agents (PRIMARY_LLM_FILTER)
-- 🟡 QC : N crawls + médiane — N à finaliser dans la prochaine session
+- ✅ QC v2 : N=3 crawls test + 1 control + médiane + filtre Haiku (livré 04/05)
 
 ### Sous-phases
 
@@ -346,7 +346,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 - ✅ 2B Gap Analyzer (avec filtre Sonar 2)
 - ✅ 2C Crawlability Agent
 - ✅ 2D Content Creator
-- 🧪 2E Quality Controller (en validation méthodologique)
+- ✅ 2E Quality Controller v2 (livré + validé sur Pack #2 Betclic le 04/05)
 - ⏳ 2F Orchestrateur multi-agents (bloqué jusqu'à 2E + 9)
 - ⏳ 2G Intégration dashboard
 
@@ -360,10 +360,10 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 - [x] **Refactor crawler** : Sonar 2 forcé fonctionnel
 - [x] **88 runs Sonar 2** générés, base propre disponible
 - [x] **Bug perplexity.com fix**
-- [ ] **Re-test variance Sonar 2** sur 3 prompts × 3 crawls (devrait être beaucoup plus stable)
-- [ ] Décision finale sur N (probablement 1-2 si Sonar 2 stable)
-- [ ] QC v2 : multi-crawl + template anti-faux-positif + filtre llm
-- [ ] Phase C pré-pitch
+- [x] **Re-test variance Sonar 2** : observée empiriquement via QC v2 sur item #6 du Pack #2 Betclic — variance [100, 98, 0] sur 3 crawls test, médiane absorbe le décrochage. Variance non-nulle confirmée.
+- [x] Décision finale sur N : **N=3 conservé**, justifié empiriquement (la médiane sauve l'item du faux négatif quantitatif au 1er run réel).
+- [x] QC v2 : multi-crawl + template factuel neutre + filtre Haiku (livré 04/05)
+- [x] Phase C pré-pitch (méthodologie défendable face à un client technique)
 
 ---
 
@@ -432,12 +432,13 @@ Pausé — pas de bandwidth.
 | ID | Sujet | Priorité | Statut |
 |---|---|---|---|
 | **DT-1** | `report_generator.py` + `email_reporter.py` à supprimer (reporting client inutilisé) | Faible | Ouvert (suppression coordonnée à planifier) |
-| **DT-3** | Quality Controller v2 (multi-crawl + filtre LLM) | **Haute** | Ouvert (= Phase 2E) |
 | **DT-4** | Clés API legacy `OPENAI_API_KEY` / `PERPLEXITY_API_KEY` à nettoyer si `tracker.py` est un jour supprimé | Faible | Ouvert (en attente décision) |
+| **DT-5** | Migrer Betclic (et PSG) vers le dynamic loader configs JSON | Faible | Ouvert (cohérence d'archi, double source de vérité actuelle) |
 
 ### Tickets clos
 
 - ✅ **DT-2** — CLOSED le 04/05/2026 — faux positif. Le Pack #2 est bien en DB depuis le 02/05. Tables centralisées dans `voxa_accounts.db` (init via effet de bord à l'import de `action_pack.py`). Smoke test ajouté (`test_action_pack_smoke.py`). Voir aussi R5.
+- ✅ **DT-3** — CLOSED le 04/05/2026 — Quality Controller v2 livré, validé sur Pack #2 Betclic. Multi-crawl (1 control + 3 test), filtre Haiku, protocole control/test par item. Inversion de verdict v1→v2 sur item #6 démontre la valeur ajoutée (v1 aurait validé un faux positif quantitatif, v2 rejette grâce aux verdicts Haiku off-topic). Cf. journal du 04/05.
 
 ### Détail DT-1 (pour mémoire — à exécuter le moment venu)
 
@@ -556,6 +557,37 @@ Pausé — pas de bandwidth.
 
 **Prochaine session prévue** : Phase 0 SSH PA (brief Code à générer dans le chat web Projet).
 
+### 2026-05-04 (jour 3 — suite — Phase 2E QC v2 livrée)
+
+**Ce qu'on a fait (en français business)** : le Quality Controller, qui valide les contenus produits par le Content Creator, est passé d'une mesure unique biaisée à un mini-protocole scientifique. Pour chaque item à valider, l'agent fait maintenant 4 mesures sur Perplexity : une "à blanc" sans contenu Voxa injecté (pour mesurer ce que Perplexity dirait spontanément), et trois avec le contenu injecté via un template factuel neutre. On compare les scores (delta), et un appel à Claude Haiku sur chaque réponse vérifie que la marque est citée de façon utile, pas juste mentionnée superficiellement. Verdict final : item validé seulement si le contenu fait progresser le score d'au moins 10 points ET si Haiku confirme la pertinence sur au moins 2 des 3 réponses.
+
+**Pourquoi** : le QC v1 produisait ~1/3 de faux positifs avec un template biaisé. Voxa vend de la mesure d'impact GEO, donc une mesure non-rigoureuse détruit le pitch face à un client technique comme Olivier. QC v2 mitige directement R2 (variance LLM) et installe une méthodologie défendable.
+
+**Validation** : testé en run réel sur le Pack #2 Betclic (3 items régulation FR/PT). Résultats :
+- Item #6 (FR) : Δ +98 pts mais 0/3 verdicts pertinents → needs_iteration (Perplexity mentionne Betclic mais off-topic vs la question posée)
+- Item #7 (PT) : Δ +75 pts, 2/3 verdicts pertinents → validated
+- Item #8 (PT) : Δ +82 pts, 2/3 verdicts pertinents → validated
+
+**Découvertes méthodologiques** :
+1. **Inversion de verdict v1→v2 sur item #6** : v1 aurait validé (score 100 sur 1 crawl), v2 rejette (filtre Haiku attrape la mention off-topic). Preuve directe de la valeur ajoutée du protocole control/test + Haiku.
+2. **Variance Sonar 2 non-nulle confirmée** : item #6 produit [100, 98, 0] sur 3 crawls test. La médiane absorbe le décrochage à 0 (médiane=98). N=3 a justifié son existence dès le 1er run réel.
+3. **Discrimination sémantique FR/PT par Haiku** : Haiku valide les mentions PT contextuelles (citations licences SRIJ avec numéros) et rejette les mentions FR descriptives mais hors-sujet. Le filtre fait du tri sémantique, pas juste de la détection de présence.
+
+**Ce que ça débloque** : Phase 2F (orchestrateur hybride) peut maintenant être construite. Le signal `qc_v2_status` est fiable, l'orchestrateur peut s'appuyer dessus pour décider quand reboucler (needs_iteration) ou s'arrêter (validated).
+
+**Décisions provisoires actées** (cf. Note 1 de méthodologie) :
+- N = 3 crawls test conservé. À reconsidérer si les variances Sonar 2 se révèlent < 5 pts sur un échantillon plus large (ouvre la voie à N=2 ou 1).
+- 1 domaine unique par client (Betclic = `betclic.fr` quel que soit le marché). Pas de breakdown FR/PT/CI/PL pour cette beta.
+- Décision DT-5 ouverte : Betclic et PSG sont définis en statique dans `voxa_db.py` alors que les autres clients passent par le dynamic loader. À harmoniser plus tard.
+
+**Limites identifiées (à traiter à terme)** :
+- Le verdict cosmetique sur l'item #6 révèle aussi une faiblesse potentielle du Content Creator (contenu thématiquement adjacent mais pas réponse à la question). Info pour la Phase 2F : l'orchestrateur devra détecter ces cas et passer le hand vers une régénération du Content Creator avec un prompt plus contraint.
+- Filtre Haiku non testé en cas d'erreur API (rate-limit, 5xx). Couvert défensivement par le fallback "ambiguous" mais jamais déclenché en run réel.
+
+**Statut** : Phase 2E ✅ closed. DT-3 ✅ closed. Nouvelle DT-5 ouverte.
+
+**Prochaine session prévue** : Phase 2F (orchestrateur hybride) — pas dans la même journée, à attaquer dans une nouvelle conversation Projet Voxa.
+
 ---
 
 ## 🎓 Leçons méthodologiques apprises
@@ -620,6 +652,12 @@ Le diagnostic prend 5 minutes mais évite des heures de debug en aveugle.
 **Contexte** : DT-2 ouvert sur l'hypothèse "table `action_items` manquante dans `voxa_betclic.db`" alors qu'en réalité les tables sont centralisées dans `voxa_accounts.db` et Pack #2 était bien généré.
 **Règle générale** : avant d'investir une session de debug, vérifier l'hypothèse de base par une inspection directe (ici : `sqlite3` sur les bonnes DBs). Un faux ticket coûte autant qu'un vrai.
 
+### Leçon 12 — "Le verdict qualitatif corrige le verdict quantitatif"
+
+**Date** : 2026-05-04 (Phase 2E QC v2)
+**Contexte** : sur l'item #6 du Pack #2 Betclic, le score quantitatif Perplexity bondit de 0 à +98 pts (delta médian) — un succès apparent maximal. Mais le filtre Haiku révèle que les 3 mentions de Betclic sont off-topic (la question portait sur les *risques de parier sur un site non agréé ANJ*, les réponses dérivent vers *Betclic est un opérateur agréé ANJ*). Sans le filtre Haiku, QC v1 aurait validé un faux positif pur.
+**Règle générale** : pour toute mesure GEO, ne jamais valider sur un signal quantitatif seul. Croiser avec un signal qualitatif sémantique (filtre LLM ou lecture humaine). Un score brut élevé peut masquer une mention off-topic, un signal qualitatif l'attrape.
+
 ---
 
 ## 📚 Glossaire des features Voxa
@@ -652,11 +690,11 @@ Le diagnostic prend 5 minutes mais évite des heures de debug en aveugle.
 **À quoi ça sert** : génère le contenu (texte + JSON-LD) pour combler les angles morts.
 **Coût** : ~0.05$ par item (Claude API).
 
-### Quality Controller (`agents/quality_controller.py`) — 🧪 EN VALIDATION
-**Limites connues à corriger dans la prochaine session** :
-- Faux positifs avec template "Imagine que..."
-- 1 crawl insuffisant (variance — cf. R2)
-- Refacto en cours : multi-crawl + nouveau template + filtre llm
+### Quality Controller v2 (`agents/quality_controller.py`) — ✅ LIVRÉ 04/05
+**À quoi ça sert** : valide chaque item du Content Creator via un protocole control/test : 1 crawl Perplexity sans injection (baseline), 3 crawls avec injection via template factuel neutre, médiane des scores test, delta = test − baseline. Filtre qualitatif Claude Haiku sur chaque crawl test (verdict pertinent / cosmetique / absent / ambiguous).
+**Statut final** : `validated` si delta > 10 ET ≥ 2/3 verdicts pertinents, sinon `needs_iteration`.
+**Coût** : ~12 crawls Perplexity + 9 appels Haiku par pack de 3 items, ~9 minutes, ~0.01$ Anthropic. Négligeable.
+**Limites connues** : 1 domaine unique par client (pas de breakdown par marché). À reconsidérer si la qualité d'augmentation se révèle insuffisante.
 
 ### Action Pack (`action_pack.py`) — ⚠️ init implicite
 **À quoi ça sert** : module V2, pipeline "Pack Action Hebdo" — agrège les outputs Content Creator en un pack hebdo.
@@ -674,5 +712,5 @@ Le diagnostic prend 5 minutes mais évite des heures de debug en aveugle.
 
 ---
 
-*Dernière mise à jour : 04/05/2026 — fusion plan technique + plan_total + section Risques formalisés.*
+*Dernière mise à jour : 04/05/2026 — Phase 2E QC v2 livrée et validée sur Pack #2 Betclic, DT-3 closed, Leçon 12 ajoutée.*
 *À régénérer après chaque session significative pour garder project knowledge et repo alignés.*

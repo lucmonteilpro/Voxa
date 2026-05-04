@@ -2,6 +2,7 @@
     "slug": "betclic",
     "client_name": "Betclic",
     "primary_brand": "Betclic",
+    "domain": "https://www.betclic.fr/",
     "vertical": "bet",
     "markets": ["fr", "pt", "fr-ci", "pl"],
     "competitors": {

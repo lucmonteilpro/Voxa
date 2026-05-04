@@ -45,6 +45,7 @@ CLIENTS_CONFIG = {
         "full":         "Betclic",
         "vertical":     "bet",
         "primary":      "Betclic",
+        "domain":       "https://www.betclic.fr/",
         "markets":      ["fr", "pt", "fr-ci", "pl"],
         "dashboard_url": "/betclic/",
     },
@@ -73,6 +74,7 @@ def _load_dynamic_configs():
                 "full":          cfg.get("client_name", slug),
                 "vertical":      cfg.get("vertical", "sport"),
                 "primary":       cfg.get("primary_brand", slug),
+                "domain":        cfg.get("domain"),
                 "markets":       cfg.get("markets", ["fr"]),
                 "dashboard_url": f"/{slug}/",
             }

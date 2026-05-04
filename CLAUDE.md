@@ -97,7 +97,7 @@ Voir `VOXA_TREE.md` pour l'arbre complet. Modules principaux :
 | Gap Analyzer | `gap_analyzer.py` | Analyse `sources` + `results` Perplexity, détecte les angles morts (seuil ≤ 60/100) | ✅ Stable (Phase 2B) |
 | Crawlability | `crawlability_agent.py` | Vérifie l'accès des bots IA (GPTBot, PerplexityBot, ClaudeBot) | ✅ Stable (renommé depuis `seo_agent`) |
 | Content Creator | `content_creator.py` | Pour chaque angle mort détecté : génère un paragraphe (150-200 mots) **+** schema JSON-LD FAQPage (2 paires Q&R) via API Claude. Output stocké en DB dans table `action_items`. Modes CLI : `--from-gap`, `--iterate`, `--n-items`, `--threshold`, `--target-score`, `--dry-run`, `--json`. Coût ~0.05$/item. | ✅ MVP (avec bug DB connu, voir §13) |
-| Quality Controller | `quality_controller.py` | Valide les contenus du Content Creator en re-crawlant Perplexity avec un prompt augmenté qui injecte le contenu ("Imagine que le site officiel publie ce contenu aujourd'hui..."). Pas de RAG, juste augmentation de prompt. | 🧪 En validation (~1/3 faux positifs détectés, refacto v2 prioritaire) |
+| Quality Controller v2 | `quality_controller.py` | Valide chaque item du Content Creator via protocole control/test : 1 crawl Perplexity sans injection (baseline), 3 crawls avec injection via template factuel neutre, médiane. Filtre Claude Haiku sur chaque crawl test (verdict pertinent/cosmetique/absent). Statut `validated` si delta > 10 ET ≥ 2/3 pertinents. CLI : `--slug`, `--pack-id`, `--limit`, `--dry-run`, `--json`. | ✅ Stable (Phase 2E livrée 04/05) |
 
 **Décisions actées** :
 - Framework : Anthropic SDK natif
@@ -201,7 +201,7 @@ Statut : reporté car Olivier Audibert a déjà été pitché. Trigger de redém
 - ✅ 2B : Gap Analyzer
 - ✅ 2C : Crawlability Agent (renommage depuis seo_agent)
 - 🟡 2D : Content Creator (MVP fonctionnel mais bug table `action_items` à corriger sur `voxa_betclic.db`)
-- 🧪 2E : Quality Controller (~1/3 faux positifs, refacto v2 prioritaire : multi-crawl + nouveau template + filtre llm)
+- ✅ 2E : Quality Controller v2 (livré + validé sur Pack #2 Betclic le 04/05)
 - ❌ 2F : Orchestrateur hybride (max 5 itérations OR plateau)
 
 ---
@@ -252,19 +252,25 @@ Statut : reporté car Olivier Audibert a déjà été pitché. Trigger de redém
 
 **Point d'attention** : ce mécanisme par effet de bord est fonctionnel mais fragile. Un refacto futur de `action_pack.py` qui déplacerait `_init_pack_tables()` en lazy-init perdrait silencieusement la création des tables. Smoke test ajouté (cf `test_action_pack_smoke.py`) pour attraper cette régression.
 
-### Ticket DT-3 : Quality Controller faux positifs
+### Ticket DT-3 : CLOSED ✅ 04/05/2026
 
-**Constat** : le QC produit ~1/3 de faux positifs avec le template actuel d'augmentation de prompt.
-
-**Refacto v2 envisagée** : multi-crawl (plusieurs runs Perplexity au lieu d'un) + nouveau template d'augmentation + filtre LLM en post-traitement.
-
-**Quand** : priorité prochaine session Phase 2E.
+QC v2 livré. Multi-crawl + filtre Haiku + protocole control/test. Validé sur Pack #2 Betclic (cf. `VOXA_PLAN.md` journal du 04/05).
 
 ### Ticket DT-4 : Clés API legacy `OPENAI_API_KEY` / `PERPLEXITY_API_KEY`
 
 **Constat** : ces deux clés ne servent plus en prod (mode API abandonné), mais sont gardées pour `tracker.py` legacy.
 
 **Décision en suspens** : si un jour on supprime `tracker.py`, on supprime aussi ces clés du `.env`. Pas urgent.
+
+### Ticket DT-5 : Migrer Betclic et PSG vers le dynamic loader configs JSON
+
+**Constat** : `voxa_db.py` définit Betclic et PSG en STATIQUE (l.42-50) alors que les autres clients passent par `_load_dynamic_configs` à partir de `configs/*.json`. C'est une double source de vérité.
+
+**Découvert le** : 04/05/2026 lors de la Phase 2E (besoin de propager le champ `domain` pour le QC v2).
+
+**Action** : migrer Betclic et PSG en config JSON dynamic, supprimer la dict statique. Vérifier que `dashboard_url` reste cohérent (`/{slug}/` est construit identiquement en static et dynamic).
+
+**Quand** : non urgent. À traiter quand on aura à ajouter un 3e champ qui nécessite la même duplication.
 
 ---
 
@@ -283,5 +289,5 @@ Style de réponse attendu de Claude (web et Code) :
 
 ---
 
-*Dernière mise à jour : 04/05/2026*
+*Dernière mise à jour : 04/05/2026 — Phase 2E QC v2 + DT-5 ouverte (migration Betclic/PSG vers configs JSON dynamic).*
 *À régénérer après chaque évolution majeure d'architecture (migration DB, ajout d'un agent, refacto cross-fichiers).*
