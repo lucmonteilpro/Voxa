@@ -242,13 +242,15 @@ Statut : reporté car Olivier Audibert a déjà été pitché. Trigger de redém
 4. Nettoyer les éventuelles entrées dans `voxa_db.py` ou autres modules
 5. Test smoke : reload PA + vérifier que toutes les routes répondent
 
-### Ticket DT-2 : Table `action_items` manquante dans `voxa_betclic.db`
+### Ticket DT-2 : CLOSED — faux positif (vérifié 04/05/2026)
 
-**Constat** : le Content Creator a généré son Pack #2 le 01/05 mais le INSERT a planté car la table `action_items` n'existe pas dans `voxa_betclic.db`. Probablement créée dans une DB historique mais pas propagée à toutes.
+**Constat initial** : on pensait que la table `action_items` manquait dans `voxa_betclic.db` et que le Pack #2 du 01/05 avait planté.
 
-**Action** : ajouter la création de `action_items` à `migrate_v3.py` (ou créer un `migrate_v3_1.py`) et l'appliquer sur toutes les DBs.
+**Diagnostic réel** : la table n'a jamais été censée exister dans les DBs par client. L'architecture est centralisée dans `voxa_accounts.db` (cf `action_pack.py:38` et toutes les fonctions Pack qui utilisent `vdb.conn_accounts()`). Le Pack #2 est bien en DB depuis le 02/05/2026 20h00 (3 items, statuts `validated` / `needs_iteration` / `validated`).
 
-**Quand** : prochaine session Phase 2D (Content Creator finalisation).
+**Mécanisme d'init** : `_init_pack_tables()` (`action_pack.py:75`) est appelée au top-level du module ligne 85, donc déclenchée par effet de bord à chaque import de `action_pack`. SQLite crée le fichier `voxa_accounts.db` s'il n'existe pas. Sur tout environnement neuf, l'import de `action_pack` (ou de `agents.content_creator` qui en dépend) crée la DB et les tables.
+
+**Point d'attention** : ce mécanisme par effet de bord est fonctionnel mais fragile. Un refacto futur de `action_pack.py` qui déplacerait `_init_pack_tables()` en lazy-init perdrait silencieusement la création des tables. Smoke test ajouté (cf `test_action_pack_smoke.py`) pour attraper cette régression.
 
 ### Ticket DT-3 : Quality Controller faux positifs
 
