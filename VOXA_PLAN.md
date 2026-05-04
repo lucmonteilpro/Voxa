@@ -1,7 +1,10 @@
 # Voxa — Plan d'action
 
 > **Document vivant** — Claude met à jour ce fichier systématiquement à chaque
-> session. Tu peux aussi l'éditer librement entre les sessions.
+> session significative. Tu peux aussi l'éditer librement entre les sessions.
+>
+> **Synchro** : à uploader dans le project knowledge "Voxa" sur claude.ai
+> ET à committer à la racine du repo (lu par Claude Code via CLAUDE.md).
 >
 > **Conventions de statut** :
 > - ✅ Terminé — feature livrée ET validée méthodologiquement
@@ -67,11 +70,17 @@ Avant d'industrialiser une mesure, comprendre comment fonctionne l'outil mesuré
 
 **Phase C — Pré-pitch commercial**
 - [ ] Pourrais-je défendre cette feature face à un client technique sceptique ?
-- [ ] Si Olivier (expert data marketing) demande "comment vous mesurez ?",
-      ai-je une réponse rigoureuse en moins de 30 secondes ?
+- [ ] Si Olivier (expert data marketing) demande "comment vous mesurez ?", ai-je une réponse rigoureuse en moins de 30 secondes ?
 - [ ] Les chiffres présentés sont-ils des moyennes/médianes sur N mesures ?
 - [ ] Le delta présenté est-il comparé à un groupe control ?
 - [ ] Documenter les limites connues de la feature
+
+### Quand sauter cette checklist
+
+Pour les features purement infra (sans mesure ni production de score) :
+crawlers, migrations DB, scripts shell, etc. La checklist n'est obligatoire
+que pour les features qui **produisent un score, une recommandation, ou une
+décision** s'appuyant sur des données.
 
 ---
 
@@ -84,7 +93,7 @@ Avant d'industrialiser une mesure, comprendre comment fonctionne l'outil mesuré
 
 **Date d'origine** : 2026-05-02
 **Statut** : décision provisoire, à valider après plus de tests
-**Décision actuelle** : **forcer Sonar 2** sur le crawler Perplexity
+**Décision actuelle** : **forcer Sonar 2** sur le crawler Perplexity ✅ implémenté 2026-05-03
 
 #### Le contexte stratégique
 
@@ -119,6 +128,19 @@ Perplexity est un **orchestrateur**, pas un modèle. Il propose plusieurs modèl
 - Hypothèse non vérifiée : les LLMs convergent sur les questions factuelles. Cette hypothèse doit être validée.
 - Si la convergence n'est pas vérifiée, on devra ajuster (cf. section "Pistes futures" ci-dessous)
 
+#### Premiers résultats observés (2026-05-03 soir)
+
+Re-crawl complet Betclic Sonar 2 forcé : **88 prompts × 4 marchés en 53 minutes**, 0 fallback (sélection 100% réussie).
+
+**Score moyen Betclic Sonar 2** :
+- 🇫🇷 France : 71.2/100 (vs ~84.9 en mode "Meilleur" avant — écart -13.7 pts)
+- 🇵🇹 Portugal : 85.3/100 (excellent)
+- 🇨🇮 Côte d'Ivoire : 58.1/100 (axe d'amélioration)
+- 🇵🇱 Pologne : 51.7/100 (axe d'amélioration)
+- **Global** : 66.2/100 (vs ~84.9 FR en "Meilleur")
+
+**Lecture honnête** : Sonar 2 donne des scores plus bas que le mode "Meilleur" probablement parce qu'il utilise des sources plus larges (moins biais marques connues). À acknowledge dans tout pitch commercial.
+
 #### Pistes futures à explorer
 
 À faire quand on aura des clients payants et plus de bandwidth :
@@ -152,33 +174,89 @@ Perplexity est un **orchestrateur**, pas un modèle. Il propose plusieurs modèl
 3. **Pitch commercial** : "Voxa mesure votre présence sur Sonar 2" est-il assez vendeur ? Ou trop technique ?
 4. **Préférences clients** : Olivier (Betclic) préfère-t-il "ce que voit Pro" ou "ce que voit la masse" ? À demander.
 
-#### Action immédiate (validée 2026-05-02)
-
-- [x] Refactor crawler Perplexity pour forcer Sonar 2
-- [ ] Test variance avec Sonar 2 forcé (3 prompts × 3 crawls)
-- [ ] Selon variance, déterminer N pour le QC
-- [ ] Mettre à jour le champ `llm` dans la DB : `perplexity-default` → `perplexity-sonar-2`
-
 #### Comment cette note évolue
 
-Cette note doit être **complétée** à chaque session qui touche au sujet Perplexity / modèles. **Ne jamais supprimer** une question, on peut juste y répondre. Si on découvre quelque chose qui invalide la décision, on l'écrit sans effacer la décision précédente.
+Cette note doit être **complétée** à chaque session qui touche au sujet Perplexity / modèles. **Ne jamais supprimer** une question, on peut juste y répondre.
+
+---
+
+## ⚠️ Risques formalisés
+
+> Consolidation des limites, fragilités et single-points-of-failure connus.
+> Format : ID, constat, impact, mitigation actuelle, action de mitigation prévue.
+> Mis à jour à chaque session qui découvre ou résout un risque.
+
+### R1 — Sonar 2 ≠ expérience utilisateur gratuit Perplexity
+
+**Constat** : on force Sonar 2 (modèle Pro) pour la stabilité scientifique, mais la majorité des utilisateurs Perplexity sont sur des modèles gratuits (Claude Instant / Mixtral / GPT-3.5) non sélectionnables manuellement.
+**Impact** : un score Voxa sur Sonar 2 ne prédit pas nécessairement la visibilité réelle vue par la masse des utilisateurs gratuits.
+**Mitigation actuelle** : limite assumée et documentée dans Note 1, à acknowledge dans tout pitch commercial.
+**Action prévue** : étude de corrélation Sonar 2 vs autres modèles (Note 1, Piste A) quand bandwidth disponible. Si corrélation faible, basculer sur Piste C (multi-crawl mode "Meilleur") ou Piste D (mesure par modèle premium).
+
+### R2 — Variance LLM non-déterministe sur 1 crawl
+
+**Constat** : sur les 8098 mesures historiques, la variance LLM est élevée — ±24 pts sur 1 mesure, ±10 pts sur 5 mesures. Le Gap Analyzer actuel est basé sur 1 crawl par prompt.
+**Impact** : les angles morts détectés par le Gap Analyzer peuvent être des faux positifs/négatifs causés par la variance plutôt que par un vrai gap.
+**Mitigation actuelle** : Sonar 2 forcé devrait baisser fortement la variance (à valider sur 3 prompts × 3 crawls). Usage privilégié de la médiane plutôt que de la moyenne sur les analyses agrégées.
+**Action prévue** : re-test variance Sonar 2 (Phase 2 État détaillé 2E) → décision finale sur N (probablement 1-2 si Sonar 2 stable, sinon multi-crawl). Multi-crawl par défaut pour QC v2.
+
+### R3 — Architecture cron Mac = single-point-of-failure
+
+**Constat** : le plan Phase 0 prévoit un cron 02h00 sur le Mac local qui lance le tracker UI puis push la DB sur PA via SCP. Si le Mac est éteint, fermé, en veille, ou en déplacement, pas de run nocturne.
+**Impact** : risque de trous dans les données client (Betclic et autres prospects), désynchro entre Mac et dashboard PA, mauvaise expérience client si Olivier consulte le dashboard et voit des données obsolètes.
+**Mitigation actuelle** : aucune. Architecture acceptée comme solution court terme.
+**Action prévue** : envisager migration du tracker vers PA (Always-On task) ou Hetzner (Phase 6) à terme. Bloqueur potentiel : Patchright/Chromium tourne mal sur PA (sandbox limitations) — à tester avant de migrer.
+
+### R4 — Crash Patchright en sortie de tracker UI
+
+**Constat** : `BrowserContext.close: Connection closed while reading from the driver` observé en sortie de `tracker_ui.py` (01/05). Sans impact data — les données sont écrites en DB avant la sortie.
+**Impact** : cosmétique côté logs aujourd'hui. Si la fréquence augmente, peut masquer de vraies erreurs ou polluer le diagnostic.
+**Mitigation actuelle** : non bloquant, observé comme "bruit". À surveiller.
+**Action prévue** : créer un ticket DT formel si la fréquence augmente. Sinon, à nettoyer lors de la prochaine refacto du module crawlers.
+
+### R5 — Mécanisme d'init implicite des tables Pack
+
+**Constat** : les tables `action_items` et autres tables Pack sont créées par effet de bord à l'import de `action_pack.py`. Pattern fragile — si l'import est court-circuité ou refactoré, les tables peuvent manquer (cas DT-2 04/05, finalement faux positif).
+**Impact** : risque de régression silencieuse en cas de refacto. Modèle peu documenté pour un nouvel arrivant.
+**Mitigation actuelle** : `test_action_pack_smoke.py` ajouté le 04/05 pour vérifier que les tables sont bien créées après import. Régression détectable en CI.
+**Action prévue** : à terme, migrer vers une init explicite via `migrate_v3.py` (ou un futur `migrate_v4.py`). Pas urgent tant que le smoke test couvre.
+
+### R6 — Évolution / durabilité de Sonar 2 dans le temps
+
+**Constat** : Sonar 2 est un modèle propriétaire Perplexity. Rien ne garantit sa pérennité (renaming, déprécation, refonte de l'orchestrateur).
+**Impact** : si Perplexity supprime ou renomme Sonar 2, le crawler casse silencieusement (fallback sur "Meilleur") et les données historiques deviennent incomparables avec les nouvelles.
+**Mitigation actuelle** : `_detect_model_used()` honnête, étiquette les runs `perplexity-fallback` si la sélection rate. Logs explicites du modèle utilisé.
+**Action prévue** : monitoring proactif (alerte si > X% de fallback sur une fenêtre). Plan de migration documenté en cas de déprécation Sonar 2 (probablement bascule sur le successeur ou sur GPT/Claude/Gemini selon corrélation découverte par Piste A).
+
+### R7 — TOS Perplexity et risque anti-bot
+
+**Constat** : on crawle Perplexity via Patchright + Chrome (anti-détection). Patchright simule un humain mais reste du scraping non autorisé par les TOS. La démo se fait sur Perplexity (pas sur Claude/ChatGPT), donc l'enjeu est concentré sur cette plateforme.
+**Impact** : si Perplexity durcit la détection, le crawler peut commencer à se faire bloquer (CAPTCHAs, rate-limit, ban IP/compte). Risque existentiel pour le tracker UI.
+**Mitigation actuelle** : sessions Patchright persistantes, compte Perplexity Pro pour réduire la friction, cadence raisonnable (88 prompts × 4 marchés en 53 min = pas de burst).
+**Action prévue** : passer à une offre premium Perplexity Enterprise / API officielle si elle ouvre l'accès Sonar 2 forcé. En backup : crawler diversifié multi-LLMs (Phase 3) pour réduire la dépendance à Perplexity seul.
 
 ---
 
 ## 🔥 Tâches en attente immédiate
 
 - [x] Run all-markets terminé (88 runs, 1385 sources)
-- [x] Gap Analyzer all-markets (23 angles morts)
+- [x] Gap Analyzer all-markets (23 angles morts détectés en mode Meilleur)
 - [x] Content Creator testé (delta moyen +47 pts)
 - [x] QC v1 testé : faux positifs identifiés
 - [x] Test variance + analyse statistique 8098 mesures historiques
 - [x] **Découverte Perplexity orchestrateur** : Sonar 2 / GPT / Claude / Gemini sélectionnables
 - [x] **Décision** : forcer Sonar 2 (cf. Note 1 stratégique)
-- [ ] **Refactor crawler Perplexity** : ajout sélection modèle + force Sonar 2
-- [ ] **Test variance avec Sonar 2 forcé** (3 prompts × 3 crawls)
-- [ ] **QC v2** : N crawls (selon variance) + nouveau template anti-faux-positif
-- [ ] Setup SSH Mac → PA — bloqueur PA password
-- [ ] Cron 02h00
+- [x] **Refactor crawler Perplexity** ✅ 2026-05-03 — sélection Sonar 2 fonctionnelle
+- [x] **Re-crawl complet Betclic Sonar 2** ✅ 2026-05-03 — 88 runs, 0 fallback, 53 min
+- [x] **Refactor Gap Analyzer** : filtre `llm = perplexity-sonar-2`, 17 angles morts
+- [x] **Bug fix crawler** : filtre élargi `hostname.includes('perplexity')` pour exclure perplexity.com
+- [x] **Setup Projet Voxa claude.ai + CLAUDE.md** ✅ 2026-05-04 — workflow web ↔ Code opérationnel
+- [x] **DT-2 closed** ✅ 2026-05-04 — faux positif (Pack #2 bien en DB depuis 02/05) + smoke test ajouté
+- [x] **Mot de passe PA régénéré** ✅ 2026-05-04 — stocké Dashlane
+- [ ] **Setup SSH Mac → PA** — PROCHAINE SESSION (Phase 0)
+- [ ] **Cron 02h00 installé** — après SSH OK
+- [ ] **Re-affiner Gap Analyzer** plus tard quand plus de données accumulées (multi-crawl)
+- [ ] **Refacto QC v2** : multi-crawl + nouveau template anti-faux-positif + filtre `llm = perplexity-sonar-2` (PHASE 2E)
 
 ---
 
@@ -186,9 +264,9 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 
 | Phase | Objectif | Statut |
 |---|---|---|
-| **Phase 0** | Sprint Betclic — infra crawl + sync | 🟡 |
+| **Phase 0** | Sprint Betclic — infra crawl + sync | 🟡 (déblocable maintenant, MDP PA OK) |
 | **Phase 1** | Démo Betclic prête | 🔄 |
-| **Phase 2** | Architecture multi-agents | 🟡 (4/8 ✅, 1 🧪) |
+| **Phase 2** | Architecture multi-agents | 🟡 (5/8 ✅, 1 🧪) |
 | **Phase 3** | Crawlers UI multi-LLMs | ⏳ |
 | **Phase 4** | Chatbot agentique sidebar | ⏳ |
 | **Phase 5** | Olivier's 5 besoins Betclic | 🔄 |
@@ -196,6 +274,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 | **Phase 7** | Pub ChatGPT US | ⏸ |
 | **Phase 8** | Voxa Politics | ⏳ |
 | **Phase 9** | Protocole control/test | ⏳ |
+| **Dette technique** | Tickets DT-1 à DT-4 | 🟡 (DT-2 closed) |
 
 ---
 
@@ -203,32 +282,54 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 
 - Dashboard, Migration DB v2, Crawler Perplexity (patchright)
 - Tracker UI v1 + v2 (--all-markets, idempotence, ETA)
-- Run Betclic all-markets : 88 runs, 1385 sources
-- 8098 mesures historiques en DB (multi-LLM, 30+ jours)
+- Run Betclic all-markets : 88 runs (Meilleur) puis 88 runs (Sonar 2)
+- 8098+ mesures historiques en DB (multi-LLM, sur 30+ jours)
 - Souscription Perplexity Pro
+- Setup Projet Voxa dans claude.ai (project knowledge + CLAUDE.md à la racine du repo)
+- Smoke test action_pack pour blinder l'init implicite des tables Pack
 
 ---
 
 ## 🟡 Phase 0 — Sprint Betclic infra
 
-- [x] Scripts shell créés
-- [ ] SSH Mac → PA — bloqué sur mot de passe PA
-- [ ] Test SCP manuel
-- [x] Run all-markets exécuté
-- [ ] Cron 02h00 installé
+**Objectif** : que les runs UI tournent automatiquement chaque nuit et que les données soient visibles sur PA pour les 4 marchés Betclic.
+
+- [x] Scripts shell créés (`voxa_nightly.sh`, `setup_ssh_pa.sh`, `install_cron.sh`)
+- [x] Mot de passe PythonAnywhere régénéré (préalable bloquant)
+- [ ] SSH key Mac → PA configurée
+- [ ] Test SCP manuel : `scp ~/Voxa/voxa_betclic.db lucsharper@ssh.pythonanywhere.com:~/Voxa/`
+- [x] Run all-markets exécuté (deux fois : Meilleur puis Sonar 2)
+- [ ] Cron 02h00 installé sur Mac (`./scripts/install_cron.sh`)
+- [ ] Vérification du run nocturne le lendemain matin
+
+**Critère de fin de phase** : `lucsharper.pythonanywhere.com/betclic/` affiche les données UI sur les 4 marchés et les recommandations dans le tab Insights.
+
+**Risque assumé** : architecture cron Mac = SPOF (cf. R3). Migration vers PA ou Hetzner reportée à plus tard (Phase 6).
+
+**Prochaine action immédiate** : brief de session Code dédié pour SSH + cron.
 
 ---
 
 ## 🔄 Phase 1 — Démo Betclic prête (reporté)
 
+**Statut** : reporté car Olivier Audibert a déjà été pitché. On attend son retour.
+
+- [ ] Page de démo scénarisée `/betclic-demo`
+- [ ] Polish + répétition démo
+- [ ] Démo réelle avec Olivier
+
+**Trigger de redémarrage** : retour d'Olivier (positif → on prépare la démo réelle, négatif/silence → on continue Phase 2).
+
 ---
 
 ## 🟡 Phase 2 — Architecture multi-agents
 
+**Objectif** : matcher la promesse Meikai d'agents qui rebouclent jusqu'à un résultat satisfaisant.
+
 ### Décisions de design
 
-- ✅ Anthropic SDK natif
-- ✅ Table `agent_runs`
+- ✅ Anthropic SDK natif (vs LangChain/CrewAI)
+- ✅ Table `agent_runs` (vs JSON files)
 - ✅ Boucle hybride max 5 itérations OR plateau
 - ✅ Gap Analyzer = Python ; Content Creator = Claude API
 - ✅ Seuil angle mort : ≤ 60/100
@@ -236,12 +337,13 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 - ✅ Voxa = GEO uniquement
 - ✅ Refacto soft `action_pack.py`
 - ✅ **Crawler force toujours 1 modèle spécifique** (cf. Note 1)
-- 🟡 QC : N crawls + médiane — N à finaliser après test Sonar 2 forcé
+- ✅ **Filtre `llm = 'perplexity-sonar-2'`** dans agents (PRIMARY_LLM_FILTER)
+- 🟡 QC : N crawls + médiane — N à finaliser dans la prochaine session
 
 ### Sous-phases
 
 - ✅ 2A Migration DB v3 + classe Agent
-- ✅ 2B Gap Analyzer
+- ✅ 2B Gap Analyzer (avec filtre Sonar 2)
 - ✅ 2C Crawlability Agent
 - ✅ 2D Content Creator
 - 🧪 2E Quality Controller (en validation méthodologique)
@@ -255,10 +357,12 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 - [x] Découverte 8098 mesures historiques exploitables
 - [x] Analyse statistique : 5 crawls = précision ±10 pts (en mode "Meilleur")
 - [x] **Découverte critique** : Perplexity est un orchestrateur, on peut forcer Sonar 2
-- [ ] **Refactor crawler** : forcer Sonar 2
-- [ ] **Re-test variance** avec Sonar 2 forcé (devrait être beaucoup plus stable)
-- [ ] Décision finale sur N
-- [ ] QC v2 : implémentation
+- [x] **Refactor crawler** : Sonar 2 forcé fonctionnel
+- [x] **88 runs Sonar 2** générés, base propre disponible
+- [x] **Bug perplexity.com fix**
+- [ ] **Re-test variance Sonar 2** sur 3 prompts × 3 crawls (devrait être beaucoup plus stable)
+- [ ] Décision finale sur N (probablement 1-2 si Sonar 2 stable)
+- [ ] QC v2 : multi-crawl + template anti-faux-positif + filtre llm
 - [ ] Phase C pré-pitch
 
 ---
@@ -277,42 +381,180 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 **Note méthodologique** : variance observée historiquement sur tous les LLMs.
 Anticiper le multi-crawl par défaut + protocole control/test (Phase 9).
 
+**Lien avec R1** : la Phase 3 est la mitigation à long terme du risque "Sonar 2 ≠ expérience utilisateur réelle". Quand on aura des crawlers multi-LLMs, on pourra valider la corrélation et ajuster.
+
 ---
 
 ## ⏳ Phase 4 — Chatbot agentique sidebar
+
+À détailler quand on s'en approchera.
+
+---
+
 ## 🔄 Phase 5 — Olivier's 5 besoins Betclic
+
+À détailler après retour Olivier (Phase 1).
+
+---
+
 ## 🔄 Phase 6 — Migration Hetzner
+
+**Lien avec R3** : la Phase 6 est la mitigation à long terme du SPOF cron Mac. À déclencher quand le revenu pilote justifie le coût d'un VPS.
+
+À détailler le moment venu.
+
+---
+
 ## ⏸ Phase 7 — Pub ChatGPT US
+
+Pausé — pas de bandwidth.
+
+---
+
 ## ⏳ Phase 8 — Voxa Politics
+
+À détailler. Prospect Édouard Philippe en démo.
+
+---
+
 ## ⏳ Phase 9 — Protocole control/test
+
+**Objectif** : pour valider scientifiquement l'efficacité d'une intervention Voxa, comparer un groupe de prompts control (jamais optimisés) à un groupe test (optimisés via Content Creator). Sans ça, on ne peut pas affirmer que Voxa fait progresser la visibilité.
+
+À implémenter avant le pitch Olivier sérieux. Bloqueur méthodologique majeur.
+
+---
+
+## 🛠 Dette technique
+
+### Tickets actifs
+
+| ID | Sujet | Priorité | Statut |
+|---|---|---|---|
+| **DT-1** | `report_generator.py` + `email_reporter.py` à supprimer (reporting client inutilisé) | Faible | Ouvert (suppression coordonnée à planifier) |
+| **DT-3** | Quality Controller v2 (multi-crawl + filtre LLM) | **Haute** | Ouvert (= Phase 2E) |
+| **DT-4** | Clés API legacy `OPENAI_API_KEY` / `PERPLEXITY_API_KEY` à nettoyer si `tracker.py` est un jour supprimé | Faible | Ouvert (en attente décision) |
+
+### Tickets clos
+
+- ✅ **DT-2** — CLOSED le 04/05/2026 — faux positif. Le Pack #2 est bien en DB depuis le 02/05. Tables centralisées dans `voxa_accounts.db` (init via effet de bord à l'import de `action_pack.py`). Smoke test ajouté (`test_action_pack_smoke.py`). Voir aussi R5.
+
+### Détail DT-1 (pour mémoire — à exécuter le moment venu)
+
+**Constat** : `report_generator.py` (moteur de génération de rapports) et `email_reporter.py` (envoi mensuel par email) sont actifs dans le code mais **plus utilisés** côté business — Voxa n'envoie plus de rapports mensuels automatiques aux clients.
+
+**Références dans le code** (vérifié par grep le 04/05/2026) :
+- `server.py:717` → `from report_generator import generate_report, CLIENTS`
+- `email_reporter.py:159` → invoque `report_generator.py` en subprocess
+
+**Action de suppression coordonnée** :
+1. Supprimer la route `/admin/report/...` dans `server.py` (et l'import)
+2. Désactiver le cron `email_reporter.py` sur PA (onglet Tasks)
+3. `git rm report_generator.py email_reporter.py`
+4. Nettoyer les éventuelles entrées dans `voxa_db.py` ou autres modules
+5. Test smoke : reload PA + vérifier que toutes les routes répondent
+
+**Quand traiter** : 1h calme, pas urgent.
+
+---
+
+## 🤝 Cadre de travail
+
+**3 surfaces Claude, 3 sweet spots** :
+
+- **Chat web Projet "Voxa" (claude.ai)** : décisions d'archi, briefs de session, débriefs, génération de docs (decks, PDF, emails), mise à jour de ce plan
+- **Claude Code (terminal CLI)** : exécution code dans le repo Voxa
+- **Cowork (desktop)** : automatisation fichiers/tâches (pas pertinent pour le code, ignoré pour l'instant)
+
+**Règles d'or** :
+
+1. Pour toute modif >20 lignes ou multi-fichiers : passer par Code, pas par le chat web
+2. Avant toute suppression de fichier : `grep -rn "nom_du_fichier"` (leçon DT-1)
+3. À chaque fin de session Code significative : régénérer ce plan, le ré-uploader dans project knowledge, et le committer à la racine
+4. Smoke test obligatoire pour les modifs de schéma DB ou les patterns d'init implicites
 
 ---
 
 ## 🗒 Journal de bord
 
-### 2026-05-02
+### 2026-05-02 (jour 1)
 
 **Découvertes majeures** :
 
-1. **8098 mesures historiques** disponibles en DB
+1. **8098 mesures historiques** disponibles en DB (multi-LLM)
 2. **Variance LLM élevée** : 1 mesure → ±24 pts ; 5 mesures → ±10 pts
-3. **Distribution bimodale** des scores (alterne 0 et 70+)
+3. **Distribution bimodale** des scores
 4. **Perplexity est un orchestrateur** (pas un modèle unique)
-   - Mode actuel : "perplexity-default" = mode "Meilleur" qui choisit aléatoirement
-   - Possibilité de forcer Sonar 2, GPT-5.4, Claude 4.6, Gemini 3.1 (via UI)
-5. **Décision** : forcer Sonar 2 dans le crawler. Justifications dans Note 1 stratégique.
+5. **Décision** : forcer Sonar 2
 
-**Décisions de design pérennes** :
-- Voxa force toujours 1 modèle par crawler (architecture cohérente)
-- Phase 3 multi-LLMs aura 1 crawler par modèle (Sonar 2, GPT-5.4, Claude 4.6, Gemini 3.1)
-- Pas de redondance entre crawlers
+**Méthodologie consolidée** :
+- Phase 9 control/test ajoutée
+- Notes stratégiques persistantes ajoutées
+- Leçons 1-7 consignées
 
-**Insight commercial Voxa** :
-> Voxa peut se positionner comme **le seul outil GEO** qui :
-> - Force un modèle stable par mesure (vs concurrents en mode "Meilleur" aléatoire)
-> - Mesure plusieurs LLMs séparément
-> - Maintient un groupe contrôle (Phase 9)
-> - Documente les limites avec rigueur (cf. Note 1)
+### 2026-05-03 (jour 2 — implémentation)
+
+**Réalisations** :
+
+1. **Refactor crawler Perplexity terminé**
+   - Méthode `_select_model()` : 5 étapes avec échec gracieux
+   - Helper `_find_model_button()` : 2 stratégies (label générique puis nom modèle)
+   - Sélecteurs ARIA validés via diagnostic DOM (`role="menu"` + `role="menuitemradio"`)
+   - `_detect_model_used()` honnête (retourne `perplexity-fallback` si sélection ratée)
+   - Param `model_to_force` configurable (None pour mode "Meilleur" volontaire)
+
+2. **Re-crawl complet Sonar 2** : 88 prompts × 4 marchés en 53 min, 0 fallback (100% sélections réussies)
+
+3. **Refactor Gap Analyzer** : constantes `PRIMARY_LLM_FILTER` et `ALLOW_LEGACY_RUNS`, intégrées dans `_language_clause()`. Toutes les 5 requêtes SQL filtrent sur llm=perplexity-sonar-2.
+
+4. **Bug fix** : filtre élargi `a.hostname.includes('perplexity')` (avant, perplexity.com passait à travers et polluait les sources avec 63 liens vers la privacy policy)
+
+5. **Premier rapport Gap Analyzer Sonar 2** : 17 angles morts détectés sur les 4 marchés Betclic. Distribution :
+   - Régulation & légalité : 6 angles morts (le gros sujet)
+   - Paiement & retraits : 4
+   - Image de marque : 3
+   - Cotes & paris : 2
+   - Visibilité : 2
+
+**Insights** :
+- **1xBet domine** sur les requêtes Côte d'Ivoire (régulation, popularité)
+- **STS et LV BET dominent** en Pologne
+- **anj.fr cité 31 fois** comme source en France (terrain à occuper)
+- Score Sonar 2 plus bas que mode "Meilleur" (66 vs 85 sur FR) — probablement plus représentatif et moins biaisé
+
+**Méthodologie consolidée** :
+- Leçon 8 ajoutée : "Documenter les décisions provisoires comme dette technique"
+
+**Limites identifiées (à traiter à terme)** :
+- Mesures Gap Analyzer basées sur **1 crawl par prompt** → variance probable (cf. R2). Pour rigueur scientifique, passer à multi-crawl (3-5 mesures + médiane).
+- Tracker_ui n'a pas encore de mode multi-crawl
+- Phase 9 control/test pas encore implémentée
+
+### 2026-05-04 (jour 3 — Setup Projet Claude + DT-2)
+
+**Setup** :
+- Création du Projet Voxa dans claude.ai avec instructions et project knowledge
+- Installation de Claude Code (v2.1.126) et création du `CLAUDE.md` à la racine
+- Workflow web ↔ Code formalisé : décisions et briefs en chat, exécution en CLI, débrief et resync project knowledge
+
+**DT-2 — Diagnostic et résolution** :
+- Hypothèse initiale (table `action_items` manquante dans `voxa_betclic.db`) invalidée
+- Diagnostic réel : architecture centralisée dans `voxa_accounts.db`, Pack #2 bien présent (3 items, 02/05 20h00)
+- Mise à jour du CLAUDE.md (§13) pour fermer le ticket avec la note de clôture
+- Création de `test_action_pack_smoke.py` pour blinder l'init implicite des tables Pack (cf. R5)
+- Smoke test exécuté avec succès dans le repo principal, état DB strictement identique avant/après
+- Commit pushé sur `main` (`758c9e0`)
+
+**Mot de passe PA régénéré** et stocké dans Dashlane → débloque la Phase 0.
+
+**Plan consolidé en VOXA_PLAN total** : fusion du plan technique (Phase 0/1/2 + dette technique) avec le plan stratégique (méthodologie, notes persistantes, Phases 3-9, journal, leçons, glossaire). Ajout de la section **⚠️ Risques formalisés** (R1 à R7) consolidant les limites éparses.
+
+**Leçons retenues** :
+- Toujours `grep` avant suppression de fichier (cas `report_generator.py`)
+- Le mécanisme d'init implicite par effet de bord à l'import est fragile mais fonctionnel — smoke test ajouté pour attraper toute régression
+- Le workflow web → Code → web fonctionne : décision en chat, brief précis, exécution, débrief
+
+**Prochaine session prévue** : Phase 0 SSH PA (brief Code à générer dans le chat web Projet).
 
 ---
 
@@ -320,44 +562,77 @@ Anticiper le multi-crawl par défaut + protocole control/test (Phase 9).
 
 ### Leçon 1 — "Code qui tourne ≠ feature qui marche"
 
+Toujours lire qualitativement les outputs avant de déclarer une feature opérationnelle. Un agent qui tourne sans erreur peut produire des données aberrantes silencieusement.
+
 ### Leçon 2 — "Pas de baseline, pas de mesure"
+
+Tout score "amélioré" doit être comparé à un score "à nu" pris dans la même session. Sinon impossible de prouver l'apport.
 
 ### Leçon 3 — "Le LLM est un outil non-déterministe"
 
+1 mesure ne suffit jamais sur un outil non-déterministe. Soit on multi-crawl, soit on force le déterminisme (cas Sonar 2 forcé).
+
 ### Leçon 4 — "Tester avant d'industrialiser"
+
+Mesurer la variance et la fiabilité d'une feature sur un échantillon avant de la déployer en pipeline complet.
 
 ### Leçon 5 — "Toujours vérifier la provenance avant de comparer"
 
+Avant de comparer deux scores, vérifier qu'ils sont issus du même outil, du même modèle, du même contexte. Sinon comparaison invalide.
+
 ### Leçon 6 — "Le control/test est non-négociable"
 
+Sans groupe control jamais optimisé, on ne peut pas prouver l'efficacité d'une intervention Voxa. À implémenter avant pitch sérieux.
+
 ### Leçon 7 — "Comprendre l'outil sous-jacent avant d'industrialiser"
+
 **Contexte** : Perplexity est un orchestrateur, pas un modèle. La variance qu'on
 attribuait à "Perplexity" venait en grande partie du choix dynamique de modèle.
 **Règle générale** : avant d'utiliser un outil pour mesurer, documenter son
 architecture interne, ses options de configuration, et ses sources de variance.
 
 ### Leçon 8 — "Documenter les décisions provisoires comme dette technique"
+
 **Date** : 2026-05-02
-**Contexte** : la décision de forcer Sonar 2 est prise dans un contexte d'incertitude
-(on ne sait pas si Sonar 2 reflète l'expérience utilisateur gratuit). Plutôt que de
-tout figer ou de tout reporter, on prend la décision **mais on consigne la
-réflexion ouverte** dans une "Note stratégique persistante" (Note 1).
 **Règle générale** : ne jamais faire un choix de design **sans** documenter le
-contexte, les hypothèses, et les pistes alternatives à explorer plus tard. La
-documentation de l'incertitude est aussi importante que la décision elle-même.
+contexte, les hypothèses, et les pistes alternatives à explorer plus tard.
+
+### Leçon 9 — "Diagnostiquer le DOM réel avant de coder un sélecteur"
+
+**Date** : 2026-05-03
+**Contexte** : J'ai d'abord supposé que le menu Perplexity utilisait `role="dialog"`
+en me basant sur ta capture d'écran initiale (en mode Pro). En mode anonyme, c'est
+en réalité `role="menu"` avec items `[role="menuitemradio"]`. Sans diagnostic DOM
+explicite (3 itérations de scripts d'inspection), j'aurais codé un sélecteur faux
+qui aurait planté silencieusement.
+**Règle générale** : avant d'écrire un sélecteur DOM, **inspecter le DOM réel
+dans le contexte exact d'exécution** (pas le contexte de la capture d'écran).
+Le diagnostic prend 5 minutes mais évite des heures de debug en aveugle.
+
+### Leçon 10 — "Grep avant suppression"
+
+**Date** : 2026-05-04 (DT-2 / cleanup `report_generator.py`)
+**Règle générale** : toujours `grep -rn "nom_du_fichier"` avant `git rm` ou refacto cross-fichiers. Une suppression à l'aveugle peut casser des imports en chaîne et provoquer un crash silencieux du serveur en prod.
+
+### Leçon 11 — "Hypothèse de bug ≠ bug réel"
+
+**Date** : 2026-05-04 (DT-2)
+**Contexte** : DT-2 ouvert sur l'hypothèse "table `action_items` manquante dans `voxa_betclic.db`" alors qu'en réalité les tables sont centralisées dans `voxa_accounts.db` et Pack #2 était bien généré.
+**Règle générale** : avant d'investir une session de debug, vérifier l'hypothèse de base par une inspection directe (ici : `sqlite3` sur les bonnes DBs). Un faux ticket coûte autant qu'un vrai.
 
 ---
 
 ## 📚 Glossaire des features Voxa
 
-### Crawler Perplexity (`crawlers/perplexity.py`)
+### Crawler Perplexity (`crawlers/perplexity.py`) — ✅ Sonar 2 forcé
 **À quoi ça sert** : récupère les vraies réponses Perplexity en automatisant un navigateur Chrome.
-**Configuration future** : forcer Sonar 2 (cf. Note 1).
-**Limite connue** : Sonar 2 ≠ expérience utilisateur gratuit (cf. Note 1 pistes futures).
+**Configuration** : force Sonar 2 par défaut (cf. Note 1). Utilisable avec `--no-force-model` pour mode "Meilleur".
+**Output** : étiquette le run en DB avec `llm = perplexity-sonar-2` (ou `perplexity-fallback` si sélection ratée).
+**Limite connue** : Sonar 2 ≠ expérience utilisateur gratuit (cf. Note 1 pistes futures et R1).
 
 ### Tracker UI (`tracker_ui.py`)
 **À quoi ça sert** : crawle les prompts d'un client en boucle pour mesurer la présence de la marque.
-**À l'avenir** : devra distinguer prompts control et prompts test (Phase 9).
+**À l'avenir** : devra distinguer prompts control et prompts test (Phase 9), passer en multi-crawl.
 
 ### Migration DB v3 (`migrate_v3.py`)
 **À quoi ça sert** : ajoute la table `agent_runs` à toutes les bases SQLite Voxa.
@@ -366,8 +641,9 @@ documentation de l'incertitude est aussi importante que la décision elle-même.
 **À quoi ça sert** : fondation commune pour tous les agents Voxa.
 **Bonus** : auto-création de DB minimale si le slug n'a pas encore de tracking.
 
-### Agent Gap Analyzer (`agents/gap_analyzer.py`)
+### Agent Gap Analyzer (`agents/gap_analyzer.py`) — ✅ filtre Sonar 2
 **À quoi ça sert** : identifie les angles morts d'une marque dans Perplexity.
+**Filtre actif** : `PRIMARY_LLM_FILTER = "perplexity-sonar-2"`. Pour réinclure les anciens runs (debug) : `ALLOW_LEGACY_RUNS = True`.
 
 ### Crawlability Agent (`agents/crawlability_agent.py`)
 **À quoi ça sert** : audit technique du site web pour vérifier qu'il est lisible par les bots IA.
@@ -377,15 +653,26 @@ documentation de l'incertitude est aussi importante que la décision elle-même.
 **Coût** : ~0.05$ par item (Claude API).
 
 ### Quality Controller (`agents/quality_controller.py`) — 🧪 EN VALIDATION
-**Limites connues** :
+**Limites connues à corriger dans la prochaine session** :
 - Faux positifs avec template "Imagine que..."
-- 1 crawl insuffisant en mode "Meilleur"
-- Refacto en cours : forcer Sonar 2 + N crawls + nouveau template
+- 1 crawl insuffisant (variance — cf. R2)
+- Refacto en cours : multi-crawl + nouveau template + filtre llm
+
+### Action Pack (`action_pack.py`) — ⚠️ init implicite
+**À quoi ça sert** : module V2, pipeline "Pack Action Hebdo" — agrège les outputs Content Creator en un pack hebdo.
+**Convention fragile** : les tables (`action_items`, etc.) sont créées par effet de bord à l'import du module (cf. R5). Couvert par `test_action_pack_smoke.py` depuis le 04/05.
+
+### Smoke test action_pack (`test_action_pack_smoke.py`) — ✅ ajouté 04/05
+**À quoi ça sert** : vérifie que les tables Pack sont bien créées après import de `action_pack.py`. Détecte toute régression sur le pattern d'init implicite (cf. R5).
 
 ### Test scripts (`test_baseline.py`, `test_qc_rag.py`, `test_variance.py`, `analyze_variance.py`)
-**À quoi ça sert** : scripts ponctuels pour valider la méthodologie.
-**Status** : ont permis de découvrir les leçons 1-8.
+**À quoi ça sert** : scripts ponctuels pour valider la méthodologie d'autres features.
 
 ### Scripts d'infra (`scripts/`)
 - `voxa_nightly.sh`, `setup_ssh_pa.sh`, `install_cron.sh`
-- Status : créés, pas encore activés (mot de passe PA).
+- Status : créés, prêts à activer (mot de passe PA OK depuis 04/05).
+
+---
+
+*Dernière mise à jour : 04/05/2026 — fusion plan technique + plan_total + section Risques formalisés.*
+*À régénérer après chaque session significative pour garder project knowledge et repo alignés.*
