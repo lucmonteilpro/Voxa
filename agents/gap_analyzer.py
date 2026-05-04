@@ -13,6 +13,14 @@ Architecture extensible :
 Pour basculer en v2 : modifier `_build_recommendation()` pour appeler une nouvelle
 fonction `_build_recommendation_llm()` qui passe les données à Claude.
 
+FILTRE LLM (Phase 2E - décision Sonar 2) :
+Cet agent ne lit que les runs Perplexity faits avec Sonar 2 forcé pour avoir
+des mesures stables. Les anciens runs (mode "Meilleur" = perplexity-default)
+sont exclus car ils mélangent plusieurs modèles. Voir VOXA_PLAN.md → Note 1.
+
+Pour réinclure les anciens runs (debug ou analyse comparative) :
+    ALLOW_LEGACY_RUNS = True
+
 Usage CLI :
     # Run sur Betclic FR avec seuil par défaut (60)
     python3 -m agents.gap_analyzer --slug betclic --language fr
@@ -46,6 +54,19 @@ DEFAULT_THRESHOLD = 60.0      # score ≤ ce seuil = angle mort
 MIN_TOP_SOURCES = 3           # min de sources stratégiques affichées par angle mort
 MAX_TOP_SOURCES = 5
 MAX_TOP_COMPETITORS = 5
+
+# ─────────────────────────────────────────────
+# Filtre LLM (Phase 2E - décision Sonar 2)
+# ─────────────────────────────────────────────
+# On ne lit que les runs faits avec Sonar 2 forcé pour avoir des mesures
+# stables. Les anciens runs (mode "Meilleur" = perplexity-default) sont
+# exclus car ils mélangent plusieurs modèles et introduisent de la variance.
+#
+# Quand on changera de modèle, il suffira de changer cette constante.
+# Pour réinclure les anciens runs (debug ou analyse comparative) :
+# passer ALLOW_LEGACY_RUNS = True.
+PRIMARY_LLM_FILTER = "perplexity-sonar-2"
+ALLOW_LEGACY_RUNS = False
 
 # Labels lisibles pour les catégories Betclic
 CATEGORY_LABELS = {
@@ -163,6 +184,7 @@ class GapAnalyzer(Agent):
                 "n_blind_spots": len(blind_spots),
                 "n_prompts_total": len(all_prompts),
                 "avg_score_global": round(avg_score_global, 1),
+                "llm_filter": PRIMARY_LLM_FILTER if not ALLOW_LEGACY_RUNS else "ALL",
             },
             "blind_spots": blind_spots,
             "category_summary": category_summary,
@@ -194,14 +216,31 @@ class GapAnalyzer(Agent):
             conn.close()
 
     def _language_clause(self, table_alias: str = "ru") -> tuple:
-        """Retourne (sql_fragment, params) pour filtrer par language.
+        """Retourne (sql_fragment, params) pour filtrer par language ET llm.
 
-        On filtre sur ru.language (table runs) parce que c'est la langue de la run,
-        pas du prompt (un même prompt peut être crawlé en plusieurs langues).
+        On filtre :
+        - sur ru.language (table runs) parce que c'est la langue de la run,
+          pas du prompt (un même prompt peut être crawlé en plusieurs langues).
+        - sur ru.llm pour ne garder que les runs Sonar 2 (Phase 2E).
+          Ce 2e filtre est désactivable via ALLOW_LEGACY_RUNS = True.
+
+        Le nom de la méthode reste "_language_clause" pour rétrocompatibilité,
+        mais elle inclut désormais le filtre LLM aussi.
         """
+        clauses = []
+        params = []
+
+        # Filtre langue (optionnel, selon self.language)
         if self.language:
-            return f"AND {table_alias}.language = ?", [self.language]
-        return "", []
+            clauses.append(f"AND {table_alias}.language = ?")
+            params.append(self.language)
+
+        # Filtre LLM (par défaut actif, désactivable via ALLOW_LEGACY_RUNS)
+        if not ALLOW_LEGACY_RUNS:
+            clauses.append(f"AND {table_alias}.llm = ?")
+            params.append(PRIMARY_LLM_FILTER)
+
+        return " ".join(clauses), params
 
     def _load_all_prompts_with_scores(self, brand: str) -> list:
         """Charge tous les prompts crawlés en mode UI avec leur score moyen pour la marque primaire."""
@@ -537,11 +576,22 @@ def main():
     print("═" * 70)
     print(f"  Voxa Gap Analyzer — {s['primary_brand']} ({s['language'] or 'tous marchés'})")
     print("═" * 70)
+    print(f"  Filtre LLM         : {s.get('llm_filter', '?')}")
     print(f"  Prompts analysés   : {s['n_prompts_total']}")
     print(f"  Score moyen        : {s['avg_score_global']}/100")
     print(f"  Seuil angle mort   : ≤ {s['threshold']}")
     print(f"  Angles morts       : {s['n_blind_spots']}")
     print("═" * 70)
+
+    # Avertissement si DB vide pour le filtre LLM actif
+    if s['n_prompts_total'] == 0 and not ALLOW_LEGACY_RUNS:
+        print()
+        print("⚠ ATTENTION : 0 prompts trouvés pour le filtre LLM "
+              f"'{PRIMARY_LLM_FILTER}'.")
+        print("  C'est normal si tu n'as pas encore re-crawlé avec Sonar 2 forcé.")
+        print("  Lance : python3 tracker_ui.py --slug betclic --all-markets")
+        print("  Ou pour debug : passer ALLOW_LEGACY_RUNS = True dans gap_analyzer.py")
+        print()
 
     # Détail des angles morts
     if output["blind_spots"]:

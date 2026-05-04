@@ -4,376 +4,388 @@
 > session. Tu peux aussi l'éditer librement entre les sessions.
 >
 > **Conventions de statut** :
-> - ✅ Terminé
-> - 🟡 En cours
+> - ✅ Terminé — feature livrée ET validée méthodologiquement
+> - 🟡 En cours — code livré mais validation en cours
 > - ⏳ À faire
 > - ❌ Bloqué (avec note explicative)
 > - 🔄 Reporté / en attente
 > - ⏸ Pausé / parked
+> - 🧪 En validation méthodologique — code livré mais tests scientifiques requis
+
+---
+
+## 🔬 Méthodologie de rigueur — Principes obligatoires
+
+> Ces principes s'appliquent à **chaque feature Voxa** sans exception.
+
+### Pourquoi cette section existe
+
+Voxa vend de la **mesure d'impact GEO**. Si la mesure est biaisée ou instable,
+tout le pitch s'effondre face à un client technique. Voxa doit être
+**le premier outil GEO scientifiquement rigoureux** — c'est un différenciateur
+commercial majeur.
+
+### Les 6 garde-fous
+
+#### 1. Distinguer "code qui tourne" vs "feature qui mesure ce qu'elle dit mesurer"
+Toujours **lire qualitativement les outputs**, pas juste les chiffres.
+
+#### 2. Mesurer la baseline avant de mesurer l'apport
+Tout score "amélioré" doit être comparé à un score "à nu" pris dans la même session.
+
+#### 3. Quantifier la variance avant de tirer des conclusions
+Si l'outil mesuré (Perplexity, ChatGPT, etc.) est non-déterministe, 1 mesure ne suffit pas.
+
+#### 4. Détecter les faux positifs
+Toujours vérifier que la réponse contient bien des **mots-clés du prompt original**.
+
+#### 5. Protocole control/test obligatoire
+Pour valider l'efficacité d'une intervention Voxa, comparer un groupe control (jamais optimisé) à un groupe test.
+
+#### 6. Comprendre l'outil sous-jacent
+Avant d'industrialiser une mesure, comprendre comment fonctionne l'outil mesuré.
+
+### Checklist obligatoire par feature
+
+À recopier et cocher pour chaque nouvelle feature qui mesure quelque chose :
+
+**Phase A — Pré-design**
+- [ ] Quelle question scientifique exacte la feature répond-elle ?
+- [ ] Quels biais possibles ?
+- [ ] Comment je vais valider que la feature mesure bien ce qu'elle dit ?
+- [ ] Quel test minimal pour invalider la feature si elle ne marche pas ?
+- [ ] Y a-t-il un groupe control/test pour cette feature ?
+- [ ] Ai-je compris l'outil sous-jacent que j'utilise ?
+
+**Phase B — Post-code**
+- [ ] Test sur des données réelles (pas seulement mocks)
+- [ ] Lecture qualitative des outputs (pas juste les nombres)
+- [ ] Comparaison avec une baseline (sans la feature) sur le même contexte
+- [ ] Si la feature mesure : 3+ mesures pour quantifier la variance
+- [ ] Vérification d'au moins 1 cas de faux positif évident
+- [ ] Vérifier la provenance des données comparées
+
+**Phase C — Pré-pitch commercial**
+- [ ] Pourrais-je défendre cette feature face à un client technique sceptique ?
+- [ ] Si Olivier (expert data marketing) demande "comment vous mesurez ?",
+      ai-je une réponse rigoureuse en moins de 30 secondes ?
+- [ ] Les chiffres présentés sont-ils des moyennes/médianes sur N mesures ?
+- [ ] Le delta présenté est-il comparé à un groupe control ?
+- [ ] Documenter les limites connues de la feature
+
+---
+
+## 📌 Notes stratégiques persistantes
+
+> Réflexions ouvertes, non tranchées définitivement, à reconsulter régulièrement.
+> Ces notes ne sont JAMAIS supprimées sans validation explicite.
+
+### Note 1 — Choix du modèle Perplexity à mesurer
+
+**Date d'origine** : 2026-05-02
+**Statut** : décision provisoire, à valider après plus de tests
+**Décision actuelle** : **forcer Sonar 2** sur le crawler Perplexity
+
+#### Le contexte stratégique
+
+Perplexity est un **orchestrateur**, pas un modèle. Il propose plusieurs modèles :
+- Mode "Meilleur" (par défaut) : choix automatique parmi tous
+- Sonar 2 : modèle propriétaire Perplexity
+- GPT-5.4, GPT-5.5 Max (locked sans abonnement) : OpenAI
+- Gemini 3.1 Pro : Google
+- Claude Sonnet 4.6, Claude Opus 4.7 Max (locked) : Anthropic
+
+#### Faits importants à mémoriser
+
+**Distribution des utilisateurs Perplexity** :
+- 33M utilisateurs actifs mensuels, 60-70M requêtes/jour
+- Majorité : utilisateurs gratuits (modèles "de base" : Claude Instant, Mixtral, GPT-3.5)
+- Minorité : utilisateurs Pro à 17-20$/mois (accès à Sonar 2, GPT-5.4, Claude 4.6, Gemini 3.1)
+
+**Limite technique** :
+- Les modèles "de base" gratuits (Claude Instant, Mixtral, GPT-3.5) ne sont **pas sélectionnables manuellement** même en Pro
+- Donc on ne peut pas mesurer ce que voit un utilisateur gratuit "à l'identique"
+
+#### Pourquoi on a choisi Sonar 2 malgré tout
+
+1. **Stabilité scientifique** : forcer un modèle = variance interne uniquement (pas de variance externe due au choix de modèle aléatoire). Variance attendue beaucoup plus faible.
+2. **Modèle natif Perplexity** : c'est leur techno propriétaire, central à leur produit, durable dans le temps.
+3. **Architecture propre** : 1 crawler = 1 modèle. Pas de redondance avec les futurs crawlers ChatGPT (GPT-5.4) / Claude.ai (Sonnet 4.6) / Gemini (3.1 Pro) en Phase 3.
+4. **Pragmatique** : on peut mesurer ce qu'on peut mesurer maintenant, sans bloquer Voxa.
+
+#### Limites assumées (à acknowledge dans tout pitch commercial)
+
+- **Sonar 2 ≠ ce que voit l'utilisateur gratuit Perplexity** (qui est sur Claude Instant/Mixtral/GPT-3.5)
+- Hypothèse non vérifiée : les LLMs convergent sur les questions factuelles. Cette hypothèse doit être validée.
+- Si la convergence n'est pas vérifiée, on devra ajuster (cf. section "Pistes futures" ci-dessous)
+
+#### Pistes futures à explorer
+
+À faire quand on aura des clients payants et plus de bandwidth :
+
+**Piste A — Étude de corrélation Sonar 2 vs autres modèles**
+- Mesurer 50 prompts sur Sonar 2 ET sur Claude 4.6 ET sur GPT-5.4 ET sur Gemini 3.1
+- Calculer la corrélation des scores
+- Si r > 0.8 : on peut continuer à utiliser Sonar 2 comme proxy
+- Si r < 0.6 : il faut mesurer chaque modèle séparément
+
+**Piste B — Crawler "incognito" pour simuler un utilisateur gratuit**
+- Utiliser un compte gratuit Perplexity (sans abonnement) avec le crawler
+- Mesurer ce que voit ce profil
+- Comparer aux mesures Sonar 2 forcé
+- Plus représentatif de l'expérience utilisateur réelle pour la masse
+
+**Piste C — Mode "Meilleur" + multi-crawl statistique rigoureux**
+- Garder le mode "Meilleur" qui reflète l'expérience utilisateur Pro
+- Compenser la variance par 5-7 crawls + médiane
+- Plus coûteux mais plus représentatif
+
+**Piste D — Mesure par modèle (offre commerciale premium)**
+- Pour les clients premium, mesurer chaque modèle séparément
+- Voxa devient le seul outil qui dit : "Sur Sonar 2 vous êtes à 80, sur Claude 60, sur GPT 40, sur Gemini 75"
+- Argument commercial très fort, mais coût × 4
+
+#### Questions ouvertes que la roadmap doit clarifier
+
+1. **Validité externe** : un score Sonar 2 = 80/100 prédit-il un score à 80/100 chez Mixtral/GPT-3.5 ?
+2. **Évolution des modèles** : Sonar 2 sera-t-il toujours là dans 6 mois ? Comment on gère la migration ?
+3. **Pitch commercial** : "Voxa mesure votre présence sur Sonar 2" est-il assez vendeur ? Ou trop technique ?
+4. **Préférences clients** : Olivier (Betclic) préfère-t-il "ce que voit Pro" ou "ce que voit la masse" ? À demander.
+
+#### Action immédiate (validée 2026-05-02)
+
+- [x] Refactor crawler Perplexity pour forcer Sonar 2
+- [ ] Test variance avec Sonar 2 forcé (3 prompts × 3 crawls)
+- [ ] Selon variance, déterminer N pour le QC
+- [ ] Mettre à jour le champ `llm` dans la DB : `perplexity-default` → `perplexity-sonar-2`
+
+#### Comment cette note évolue
+
+Cette note doit être **complétée** à chaque session qui touche au sujet Perplexity / modèles. **Ne jamais supprimer** une question, on peut juste y répondre. Si on découvre quelque chose qui invalide la décision, on l'écrit sans effacer la décision précédente.
 
 ---
 
 ## 🔥 Tâches en attente immédiate
 
-> Tâches concrètes à exécuter dès que possible (pas des phases entières).
-
-- [x] **Lancer `tracker_ui.py --slug betclic --all-markets`** (run terminé : 88 runs, 1385 sources)
-- [x] **Lancer Gap Analyzer all-markets** : 23 angles morts détectés
-- [x] **Tester Content Creator en mode --from-gap** : OK, 2 items générés (delta +90)
-- [ ] **Bug fix Content Creator** : appliquer la version corrigée pour le KeyError 'delta'
-- [ ] **Setup SSH Mac → PA** : retrouver mot de passe PA puis relancer `./scripts/setup_ssh_pa.sh`
-- [ ] **Installer cron 02h00** : `./scripts/install_cron.sh` après que SSH fonctionne
+- [x] Run all-markets terminé (88 runs, 1385 sources)
+- [x] Gap Analyzer all-markets (23 angles morts)
+- [x] Content Creator testé (delta moyen +47 pts)
+- [x] QC v1 testé : faux positifs identifiés
+- [x] Test variance + analyse statistique 8098 mesures historiques
+- [x] **Découverte Perplexity orchestrateur** : Sonar 2 / GPT / Claude / Gemini sélectionnables
+- [x] **Décision** : forcer Sonar 2 (cf. Note 1 stratégique)
+- [ ] **Refactor crawler Perplexity** : ajout sélection modèle + force Sonar 2
+- [ ] **Test variance avec Sonar 2 forcé** (3 prompts × 3 crawls)
+- [ ] **QC v2** : N crawls (selon variance) + nouveau template anti-faux-positif
+- [ ] Setup SSH Mac → PA — bloqueur PA password
+- [ ] Cron 02h00
 
 ---
 
 ## 📊 Vue d'ensemble
 
-| Phase | Objectif | Statut | Sessions estimées | Échéance |
-|---|---|---|---|---|
-| **Phase 0** | Sprint Betclic — finir l'infra crawl + sync | 🟡 | 1 (en cours) | Cette semaine |
-| **Phase 1** | Démo Betclic prête | 🔄 | 2-3 | Reporté (Olivier déjà pitché) |
-| **Phase 2** | Architecture multi-agents | 🟡 | 8-10 (4/8 faits) | 3-4 semaines |
-| **Phase 3** | Crawlers UI multi-LLMs | ⏳ | 4-5 | 2 semaines |
-| **Phase 4** | Chatbot agentique sidebar | ⏳ | 4-5 | 2 semaines |
-| **Phase 5** | Olivier's 5 besoins Betclic | 🔄 | 3-4 | Selon retour Olivier |
-| **Phase 6** | Migration Hetzner | 🔄 | 2-3 | Quand product mature |
-| **Phase 7** | Pub ChatGPT US | ⏸ | — | Pas de calendrier |
-| **Phase 8** | Voxa Politics — adaptation produit | ⏳ | 2-3 | Quand Phase 2 quasi terminée |
+| Phase | Objectif | Statut |
+|---|---|---|
+| **Phase 0** | Sprint Betclic — infra crawl + sync | 🟡 |
+| **Phase 1** | Démo Betclic prête | 🔄 |
+| **Phase 2** | Architecture multi-agents | 🟡 (4/8 ✅, 1 🧪) |
+| **Phase 3** | Crawlers UI multi-LLMs | ⏳ |
+| **Phase 4** | Chatbot agentique sidebar | ⏳ |
+| **Phase 5** | Olivier's 5 besoins Betclic | 🔄 |
+| **Phase 6** | Migration Hetzner | 🔄 |
+| **Phase 7** | Pub ChatGPT US | ⏸ |
+| **Phase 8** | Voxa Politics | ⏳ |
+| **Phase 9** | Protocole control/test | ⏳ |
 
 ---
 
-## ✅ Phase préparatoire (déjà fait — historique)
+## ✅ Phase préparatoire (déjà fait)
 
-- [x] Dashboard light mode + sidebar 3 sections (MONITOR / IMPROVE / DISCOVER)
-- [x] 4 KPI cards avec icônes
-- [x] Filter bar sticky compact
-- [x] Migration DB v2 : ajout `crawl_method`, `screenshot_path`, `crawl_duration_ms`, table `sources`
-- [x] Backup automatique des DBs avant migration
-- [x] Crawler `crawlers/perplexity.py` (patchright + Chrome stable)
-- [x] Login Perplexity persistant (cookies dans `crawlers/sessions/perplexity_patchright/`)
-- [x] Tracker UI v1 : crawl + persistence DB
-- [x] Tracker UI v2 : `--all-markets`, idempotence, ETA, gestion erreurs
-- [x] Run Betclic FR validé : 22 prompts, 298 sources, score 84.9/100
-- [x] Run Betclic all-markets : 88 runs, 1385 sources, 23 angles morts
-- [x] Top 10 domaines Perplexity FR identifiés
-- [x] Recommandations dashboard filtrées sur runs >= 2026-05-01
-- [x] Souscription Perplexity Pro
+- Dashboard, Migration DB v2, Crawler Perplexity (patchright)
+- Tracker UI v1 + v2 (--all-markets, idempotence, ETA)
+- Run Betclic all-markets : 88 runs, 1385 sources
+- 8098 mesures historiques en DB (multi-LLM, 30+ jours)
+- Souscription Perplexity Pro
 
 ---
 
-## 🟡 Phase 0 — Sprint Betclic infra (en cours)
+## 🟡 Phase 0 — Sprint Betclic infra
 
-**Objectif** : que les runs UI tournent automatiquement chaque nuit et que les données soient visibles sur PA.
-
-- [x] Scripts shell créés (`voxa_nightly.sh`, `setup_ssh_pa.sh`, `install_cron.sh`)
-- [ ] SSH key Mac → PA configurée — Bloqueur : retrouver mot de passe PA
-- [ ] Test SCP manuel : `scp ~/Voxa/voxa_betclic.db lucsharper@ssh.pythonanywhere.com:~/Voxa/`
-- [x] Run all-markets exécuté (FR + PT + FR-CI + PL = 88 prompts, 1385 sources)
-- [ ] Cron 02h00 installé sur Mac (`./scripts/install_cron.sh`)
-- [ ] Vérification du run nocturne le lendemain matin
-
-**Critère de fin de phase** : `lucsharper.pythonanywhere.com/betclic/` affiche les données UI sur les 4 marchés et les recommandations dans le tab Insights.
+- [x] Scripts shell créés
+- [ ] SSH Mac → PA — bloqué sur mot de passe PA
+- [ ] Test SCP manuel
+- [x] Run all-markets exécuté
+- [ ] Cron 02h00 installé
 
 ---
 
 ## 🔄 Phase 1 — Démo Betclic prête (reporté)
 
-Reporté car Olivier déjà pitché. On attend son retour avant de retravailler la démo.
-
-- [ ] Page de démo scénarisée `/betclic-demo`
-- [ ] Polish + répétition démo
-- [ ] Démo réelle avec Olivier
-
-**Trigger de redémarrage** : retour d'Olivier.
-
 ---
 
-## 🟡 Phase 2 — Architecture multi-agents (priorité 1)
+## 🟡 Phase 2 — Architecture multi-agents
 
-**Objectif** : matcher la promesse Meikai d'agents qui rebouclent jusqu'à un résultat satisfaisant.
+### Décisions de design
 
-### Décisions de design (validées)
-
-- ✅ **Framework** : Anthropic SDK natif (vs LangChain/CrewAI)
-- ✅ **Stockage outputs** : table SQLite `agent_runs`
-- ✅ **Premier agent** : Gap Analyzer
-- ✅ **Boucle orchestrateur** : hybride max 5 itérations OR plateau
-- ✅ **Génération recos** : Gap Analyzer = Python templates (gratuit) ; Content Creator = Claude API (qualité)
-- ✅ **Seuil angle mort** : ≤ 60/100
-- ✅ **Auto-création DB minimale** si slug sans tracking préalable
-- ✅ **Voxa = GEO uniquement** : `seo_agent` renommé `crawlability_agent`
-- ✅ **Refacto soft `action_pack.py`** : Content Creator hérite de `Agent`, réutilise `action_pack.py` privé
+- ✅ Anthropic SDK natif
+- ✅ Table `agent_runs`
+- ✅ Boucle hybride max 5 itérations OR plateau
+- ✅ Gap Analyzer = Python ; Content Creator = Claude API
+- ✅ Seuil angle mort : ≤ 60/100
+- ✅ Auto-création DB minimale
+- ✅ Voxa = GEO uniquement
+- ✅ Refacto soft `action_pack.py`
+- ✅ **Crawler force toujours 1 modèle spécifique** (cf. Note 1)
+- 🟡 QC : N crawls + médiane — N à finaliser après test Sonar 2 forcé
 
 ### Sous-phases
 
-#### ✅ 2A — Migration DB v3 + classe abstraite Agent
+- ✅ 2A Migration DB v3 + classe Agent
+- ✅ 2B Gap Analyzer
+- ✅ 2C Crawlability Agent
+- ✅ 2D Content Creator
+- 🧪 2E Quality Controller (en validation méthodologique)
+- ⏳ 2F Orchestrateur multi-agents (bloqué jusqu'à 2E + 9)
+- ⏳ 2G Intégration dashboard
 
-#### ✅ 2B — Agent Gap Analyzer
-- 23 angles morts détectés sur Betclic all-markets
+### État détaillé 2E
 
-#### ✅ 2C — Crawlability Agent
-- Wrapper de `site_scanner.py`, audit GEO du site
-
-#### ✅ 2D — Content Creator
-- Hérite de `Agent`, réutilise `action_pack.py` privé
-- Modes : `--from-gap`, `--iterate`, `--n-items`, `--threshold`
-- Tri intelligent : score croissant + priorité catégorie (régulation, paiement)
-
-#### ⏳ 2E — Quality Controller (suivant)
-- [ ] Re-crawle Perplexity avec contenu proposé via prompt augmentation
-- [ ] Mesure l'impact réel sur le score
-- [ ] Feedback structuré au Content Creator si insuffisant
-
-#### ⏳ 2F — Orchestrateur multi-agents
-- [ ] Boucle Gap → Crawlability → Content → QC
-- [ ] Critère d'arrêt : max 5 itérations OR plateau
-
-#### ⏳ 2G — Intégration dashboard
-- [ ] Tab "Optimisations" dans la sidebar (section IMPROVE)
-- [ ] Affichage historique `agent_runs`
-- [ ] Bouton "Lancer optimisation" qui déclenche l'orchestrateur
+- [x] Code v1 livré
+- [x] Tests baseline + variance + RAG
+- [x] Découverte 8098 mesures historiques exploitables
+- [x] Analyse statistique : 5 crawls = précision ±10 pts (en mode "Meilleur")
+- [x] **Découverte critique** : Perplexity est un orchestrateur, on peut forcer Sonar 2
+- [ ] **Refactor crawler** : forcer Sonar 2
+- [ ] **Re-test variance** avec Sonar 2 forcé (devrait être beaucoup plus stable)
+- [ ] Décision finale sur N
+- [ ] QC v2 : implémentation
+- [ ] Phase C pré-pitch
 
 ---
 
 ## ⏳ Phase 3 — Crawlers UI multi-LLMs
 
-- [ ] `crawlers/chatgpt.py` : ChatGPT Search (login Google persistant)
-- [ ] `crawlers/claude_ai.py` : Claude.ai
-- [ ] `crawlers/gemini.py` : Gemini
-- [ ] `tracker_ui.py` : argument `--llm`
-- [ ] DB : runs séparées par LLM
-- [ ] Vue dashboard : breakdown par LLM
+**Architecture cible** : 1 crawler = 1 modèle forcé.
+
+- [ ] `crawlers/chatgpt.py` : force GPT-5.4 (ou ce qu'OpenAI permet)
+- [ ] `crawlers/claude_ai.py` : force Claude Sonnet 4.6
+- [ ] `crawlers/gemini.py` : force Gemini 3.1 Pro
+- [ ] `tracker_ui.py` : argument `--llm` (sonar / gpt / claude / gemini / all)
+- [ ] DB : runs séparées par crawler/modèle (ex : 1 prompt × 4 LLMs = 4 runs)
+- [ ] Vue dashboard : breakdown par LLM dans le ranking
+
+**Note méthodologique** : variance observée historiquement sur tous les LLMs.
+Anticiper le multi-crawl par défaut + protocole control/test (Phase 9).
 
 ---
 
 ## ⏳ Phase 4 — Chatbot agentique sidebar
-
-- [ ] Backend Flask `/api/chat` (Claude API + tools)
-- [ ] Tools : `query_db`, `generate_jsonld`, `simulate_score`, `run_agent`
-- [ ] Frontend Dash : composant chat dans la sidebar gauche
-- [ ] Historique persisté
-- [ ] Affichage des outils invoqués
-
----
-
 ## 🔄 Phase 5 — Olivier's 5 besoins Betclic
-
-1. ⏳ Landing pages GEO-only (`geo.betclic.fr`)
-2. ⏳ Tracker clics par origine
-3. ⏳ Estimation volumes prompts par marché
-4. ✅ Score prédit + évolution (`score_simulator.py` + `action_pack.py`)
-5. ⏳ Documentation "1 CNAME suffit"
-
----
-
-## 🔄 Phase 6 — Migration infra Hetzner
-
-**Trigger** : product mature ET 3-4 clients en discussion sérieuse.
-
-- [ ] Inscription Hetzner Cloud + création VPS CX22 (4€/mois)
-- [ ] Setup Ubuntu 24.04 + Python 3.12 + patchright + Chromium
-- [ ] xvfb pour Chromium "headless visible"
-- [ ] Login Perplexity Pro persistant via VNC
-- [ ] systemd timer cron quotidien
-- [ ] Sync auto Hetzner → PA via rsync nightly
-
----
-
-## ⏸ Phase 7 — Pub ChatGPT US (parked)
-
-À ressortir quand cash récurrent suffisant.
-
----
-
+## 🔄 Phase 6 — Migration Hetzner
+## ⏸ Phase 7 — Pub ChatGPT US
 ## ⏳ Phase 8 — Voxa Politics
-
-### 8A — Alias slugs et tolérance
-- [ ] `SLUG_ALIASES` : `edouardphilippe` → `ephilippe`, etc.
-
-### 8B — Adaptation Gap Analyzer pour vertical politique
-- [ ] Catégories : `discovery`, `program`, `comparison`, `position`, `reputation`
-
-### 8C — Crawlability Agent pour sites politiques
-- [ ] Audit horizons-le-parti.fr (score 17/100, pas de sitemap, 0 JSON-LD)
-- [ ] Schema spécifique : `Person`, `Organization`, `PoliticalParty`
-
-### 8D — Pitch Voxa Politics actualisé
-
-### 8E — EU AI Act Politics
-- [ ] Conformité Digital Omnibus (adopté 26 mars 2026)
+## ⏳ Phase 9 — Protocole control/test
 
 ---
 
 ## 🗒 Journal de bord
 
-### 2026-05-01
+### 2026-05-02
 
-**Phase 2D — Content Creator (terminé)**
-- Refacto soft : `agents/content_creator.py` hérite de `Agent`, réutilise `action_pack.py` privé
-- Tests OK : 2 items générés, delta +90 pts
-- Bug fix : KeyError 'delta' quand pack existant lu en DB → utilisation de `.get()`
-- Bug fix : tri intelligent des angles morts (score croissant + priorité catégorie)
+**Découvertes majeures** :
 
-**Insight commercial Betclic** : score Perplexity 84/100 atteint malgré crawlabilité 25/100 → potentiel énorme avec balisage GEO
+1. **8098 mesures historiques** disponibles en DB
+2. **Variance LLM élevée** : 1 mesure → ±24 pts ; 5 mesures → ±10 pts
+3. **Distribution bimodale** des scores (alterne 0 et 70+)
+4. **Perplexity est un orchestrateur** (pas un modèle unique)
+   - Mode actuel : "perplexity-default" = mode "Meilleur" qui choisit aléatoirement
+   - Possibilité de forcer Sonar 2, GPT-5.4, Claude 4.6, Gemini 3.1 (via UI)
+5. **Décision** : forcer Sonar 2 dans le crawler. Justifications dans Note 1 stratégique.
 
-**Insight Voxa Politics** : horizons-le-parti.fr à 17/100 → pas de sitemap, 0 JSON-LD → opportunité de pitcher rapidement
+**Décisions de design pérennes** :
+- Voxa force toujours 1 modèle par crawler (architecture cohérente)
+- Phase 3 multi-LLMs aura 1 crawler par modèle (Sonar 2, GPT-5.4, Claude 4.6, Gemini 3.1)
+- Pas de redondance entre crawlers
 
-**Top concurrents Betclic toutes langues** : Unibet (19), STS (19), Parions Sport (18), Fortuna (18), FDJ (18), 1xBet (18), Winamax (17), Solverde (16), Bwin (15), Placard (12)
-
-**Décisions clés**
-- Hetzner reporté après amélioration produit complète
-- Voxa = GEO uniquement (pas SEO)
-- Content Creator = Claude API (qualité éditoriale critique)
-- Plan d'action mis à jour systématiquement par Claude à chaque session
-- À chaque feature ajoutée, une explication simple est ajoutée en bas du plan
+**Insight commercial Voxa** :
+> Voxa peut se positionner comme **le seul outil GEO** qui :
+> - Force un modèle stable par mesure (vs concurrents en mode "Meilleur" aléatoire)
+> - Mesure plusieurs LLMs séparément
+> - Maintient un groupe contrôle (Phase 9)
+> - Documente les limites avec rigueur (cf. Note 1)
 
 ---
 
-## 📝 Comment utiliser ce document
+## 🎓 Leçons méthodologiques apprises
 
-1. **Mise à jour automatique** : Claude met à jour ce fichier à chaque session
-2. **Édition manuelle** : tu peux modifier librement entre les sessions
-3. **Tâches en attente immédiate** : section en haut pour les actions concrètes du jour
-4. **Statuts** : modifie l'emoji en début de section/phase quand le statut change
-5. **Décisions clés** : ajoute une entrée dans le **Journal de bord** avec la date
-6. **Versionning** : ce fichier est dans `~/Voxa/VOXA_PLAN.md` et pushé sur GitHub
+### Leçon 1 — "Code qui tourne ≠ feature qui marche"
+
+### Leçon 2 — "Pas de baseline, pas de mesure"
+
+### Leçon 3 — "Le LLM est un outil non-déterministe"
+
+### Leçon 4 — "Tester avant d'industrialiser"
+
+### Leçon 5 — "Toujours vérifier la provenance avant de comparer"
+
+### Leçon 6 — "Le control/test est non-négociable"
+
+### Leçon 7 — "Comprendre l'outil sous-jacent avant d'industrialiser"
+**Contexte** : Perplexity est un orchestrateur, pas un modèle. La variance qu'on
+attribuait à "Perplexity" venait en grande partie du choix dynamique de modèle.
+**Règle générale** : avant d'utiliser un outil pour mesurer, documenter son
+architecture interne, ses options de configuration, et ses sources de variance.
+
+### Leçon 8 — "Documenter les décisions provisoires comme dette technique"
+**Date** : 2026-05-02
+**Contexte** : la décision de forcer Sonar 2 est prise dans un contexte d'incertitude
+(on ne sait pas si Sonar 2 reflète l'expérience utilisateur gratuit). Plutôt que de
+tout figer ou de tout reporter, on prend la décision **mais on consigne la
+réflexion ouverte** dans une "Note stratégique persistante" (Note 1).
+**Règle générale** : ne jamais faire un choix de design **sans** documenter le
+contexte, les hypothèses, et les pistes alternatives à explorer plus tard. La
+documentation de l'incertitude est aussi importante que la décision elle-même.
 
 ---
 
 ## 📚 Glossaire des features Voxa
 
-> Pour chaque module/agent ajouté, une explication simple en français : à quoi
-> ça sert, comment l'utiliser, ce que ça produit. Mise à jour systématique.
-
 ### Crawler Perplexity (`crawlers/perplexity.py`)
-
-**À quoi ça sert** : récupère les vraies réponses que les utilisateurs voient
-quand ils questionnent Perplexity, avec les sources web utilisées.
-
-**Comment ça marche** : ouvre une fenêtre Chrome contrôlée, navigue sur
-perplexity.ai, tape le prompt, attend la réponse, capture la réponse + les
-sources URL.
-
-**Ce que ça produit** : la réponse texte + une liste d'URLs sources +
-screenshot de la page.
-
----
+**À quoi ça sert** : récupère les vraies réponses Perplexity en automatisant un navigateur Chrome.
+**Configuration future** : forcer Sonar 2 (cf. Note 1).
+**Limite connue** : Sonar 2 ≠ expérience utilisateur gratuit (cf. Note 1 pistes futures).
 
 ### Tracker UI (`tracker_ui.py`)
-
-**À quoi ça sert** : lance le crawler Perplexity sur une liste de prompts pour
-un client donné (ex: les 22 prompts Betclic FR), pour mesurer la présence de
-la marque dans les réponses.
-
-**Comment l'utiliser** :
-- 1 marché : `python3 tracker_ui.py --slug betclic --language fr`
-- Tous marchés : `python3 tracker_ui.py --slug betclic --all-markets`
-- Test rapide : `python3 tracker_ui.py --slug betclic --language fr --limit 3`
-
-**Ce que ça produit** : pour chaque prompt, un score GEO (0-100) basé sur la
-présence/sentiment/position de la marque + sources Perplexity capturées.
-
-**Idempotence** : si tu relances le même jour, les prompts déjà crawlés sont
-skip. Pratique pour reprendre après une coupure.
-
----
+**À quoi ça sert** : crawle les prompts d'un client en boucle pour mesurer la présence de la marque.
+**À l'avenir** : devra distinguer prompts control et prompts test (Phase 9).
 
 ### Migration DB v3 (`migrate_v3.py`)
-
-**À quoi ça sert** : a ajouté la table `agent_runs` à toutes les bases SQLite
-Voxa pour permettre l'architecture multi-agents.
-
-**Comment l'utiliser** : `python3 migrate_v3.py` (déjà fait, idempotent).
-
-**Ce que ça produit** : table SQLite qui logge chaque exécution d'agent
-(qui ? quand ? combien de temps ? succès ou échec ? quel input/output ?).
-
----
+**À quoi ça sert** : ajoute la table `agent_runs` à toutes les bases SQLite Voxa.
 
 ### Classe abstraite Agent (`agents/base.py`)
-
-**À quoi ça sert** : fondation commune pour tous les agents Voxa. Évite la
-duplication du code de logging.
-
-**Comment l'utiliser** : tu hérites de `Agent` et tu implémentes juste la
-méthode `execute()`. Le reste (logging DB, gestion erreurs, durée) est géré
-automatiquement.
-
-**Ce que ça produit** : à chaque appel `agent.run(input)`, une ligne dans
-`agent_runs` avec status (success/failed) + l'output complet.
-
----
+**À quoi ça sert** : fondation commune pour tous les agents Voxa.
+**Bonus** : auto-création de DB minimale si le slug n'a pas encore de tracking.
 
 ### Agent Gap Analyzer (`agents/gap_analyzer.py`)
-
-**À quoi ça sert** : identifie les **angles morts** d'une marque dans les
-réponses Perplexity. Réponds à la question : "sur quels prompts on est
-absent ou faible, et qui nous remplace ?".
-
-**Comment l'utiliser** :
-- 1 marché : `python3 -m agents.gap_analyzer --slug betclic --language fr`
-- Tous marchés : `python3 -m agents.gap_analyzer --slug betclic`
-- Output JSON : ajouter `--json`
-
-**Ce que ça produit** : la liste des prompts faibles, pour chacun les
-concurrents qui dominent + les sources Perplexity à viser, plus une reco
-actionnable. Sur Betclic toutes langues : 23 angles morts détectés (8 sur
-régulation, 6 sur paiement, etc.).
-
----
+**À quoi ça sert** : identifie les angles morts d'une marque dans Perplexity.
 
 ### Crawlability Agent (`agents/crawlability_agent.py`)
-
-**À quoi ça sert** : audit technique du site web cible pour vérifier qu'il
-est lisible par les bots IA (GPTBot, PerplexityBot, ClaudeBot, etc.).
-
-**Comment l'utiliser** :
-- Audit pur : `python3 -m agents.crawlability_agent --slug betclic`
-- Croisé avec Gap : ajouter `--with-gap`
-- URL custom : `--url https://example.com`
-
-**Ce que ça produit** : un score de crawlabilité IA (0-100), la liste des
-bots qui peuvent (ou ne peuvent pas) accéder, et des recommandations
-techniques (ajouter un schema FAQPage, sitemap.xml, etc.).
-
-**Tests réels** : Betclic 25/100, PSG 50/100, horizons-le-parti.fr 17/100.
-
----
+**À quoi ça sert** : audit technique du site web pour vérifier qu'il est lisible par les bots IA.
 
 ### Content Creator (`agents/content_creator.py`)
+**À quoi ça sert** : génère le contenu (texte + JSON-LD) pour combler les angles morts.
+**Coût** : ~0.05$ par item (Claude API).
 
-**À quoi ça sert** : génère le contenu (texte HTML + JSON-LD FAQPage) à
-publier sur le site pour combler les angles morts détectés par le Gap
-Analyzer.
+### Quality Controller (`agents/quality_controller.py`) — 🧪 EN VALIDATION
+**Limites connues** :
+- Faux positifs avec template "Imagine que..."
+- 1 crawl insuffisant en mode "Meilleur"
+- Refacto en cours : forcer Sonar 2 + N crawls + nouveau template
 
-**Comment l'utiliser** :
-- Mode auto (utilise le Gap) : `python3 -m agents.content_creator --slug betclic --from-gap`
-- Avec self-eval : ajouter `--iterate` (plus lent mais meilleurs scores)
-- Limiter le nombre : `--n-items 3`
-- Test sans écriture : `--dry-run`
-
-**Ce que ça produit** : pour chaque angle mort, un paragraphe optimisé
-(150-200 mots) qui mentionne la marque + un schema JSON-LD FAQPage prêt à
-copier-coller dans le code source de la page. Le tout stocké dans la table
-`action_items` (visible dans le dashboard via le tab Insights).
-
-**Coût** : utilise Claude API (~0.05$ par item généré). Pour Betclic
-(2 items) : ~0.10$ par run.
-
-**Tri intelligent** : les angles morts sont traités par priorité décroissante
-(score le plus bas en premier, puis catégories régulation/paiement avant les
-autres).
-
----
+### Test scripts (`test_baseline.py`, `test_qc_rag.py`, `test_variance.py`, `analyze_variance.py`)
+**À quoi ça sert** : scripts ponctuels pour valider la méthodologie.
+**Status** : ont permis de découvrir les leçons 1-8.
 
 ### Scripts d'infra (`scripts/`)
-
-**À quoi ça sert** : automatiser le run nocturne du tracker UI sur Mac avec
-sync automatique vers PythonAnywhere.
-
-**Fichiers** :
-- `voxa_nightly.sh` : lance le tracker + sync DB → PA
-- `setup_ssh_pa.sh` : configure une SSH key Mac→PA (one-shot)
-- `install_cron.sh` : installe le cron 02h00 sur Mac
-
-**Status** : créés mais pas encore activés (bloqué sur le mot de passe PA).
+- `voxa_nightly.sh`, `setup_ssh_pa.sh`, `install_cron.sh`
+- Status : créés, pas encore activés (mot de passe PA).
