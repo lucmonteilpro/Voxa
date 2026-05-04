@@ -1,0 +1,285 @@
+# Voxa — Contexte projet (v3)
+
+> Document maître à charger dans le project knowledge "Voxa" sur claude.ai
+> et copié à la racine du repo en `CLAUDE.md` pour Claude Code.
+> Maintenu manuellement, à régénérer à chaque évolution majeure d'architecture.
+
+---
+
+## 1. Pitch produit
+
+Voxa est un SaaS de **GEO Intelligence** : on mesure et on améliore la visibilité d'une marque dans les réponses des LLM grand public (ChatGPT, Claude, Perplexity, Gemini). Pure GEO, pas de SEO Google.
+
+**Modèle économique** : retainer mensuel multi-tiers. Pilote payant en cours sur Betclic, prospects en démo (Le Havre AC, ASSE, Winamax, Unibet, Édouard Philippe).
+
+**Différenciation produit (Phase 2 en cours)** : architecture multi-agents qui rebouclent jusqu'à un résultat satisfaisant — Gap Analyzer, Crawlability, Content Creator, Quality Controller, orchestrateur hybride.
+
+---
+
+## 2. Stack technique
+
+- **Langage** : Python 3.10
+- **Web** : Flask + Dash/Plotly avec DispatcherMiddleware multi-clients
+- **Frontend dashboards** : Dash + Bootstrap 5 + `theme.py` (design system unifié)
+- **DB** : SQLite, une base par client (`voxa.db`, `voxa_betclic.db`, etc.)
+- **LLMs trackés** : Claude (Anthropic SDK), GPT-4o-mini (OpenAI), Perplexity Sonar — historiquement via API, **désormais via crawling UI Perplexity** (Patchright + Chrome)
+- **Agents** : Anthropic SDK natif (pas LangChain, pas CrewAI)
+- **Crawling Perplexity** : Patchright (anti-détection) + sessions persistantes
+- **Hosting** : PythonAnywhere (plan Hacker), `lucsharper.pythonanywhere.com`
+- **Local** : `/Users/lucmonteil/Voxa` (Mac)
+- **Repo** : `lucmonteilpro/Voxa` (privé), branche par défaut `main`, URL `https://github.com/lucmonteilpro/Voxa.git`
+
+---
+
+## 3. Architecture v3 — principes clés
+
+**DispatcherMiddleware multi-clients** : un seul process Flask sert N dashboards Dash via `wsgi.py`. Le routing par slug est fait au niveau WSGI, pas dans Flask.
+
+**Factory pattern dashboards** : `dashboard_generic.py` expose `make_dashboard(slug)` qui lit `configs/{slug}.json` et instancie un dashboard Dash complet. Plus de `dashboard_psg.py` / `dashboard_betclic.py` séparés.
+
+**Auto-discovery clients** : `wsgi.py` v3 scanne `configs/*.json` au démarrage et monte automatiquement chaque dashboard sur `/{slug}/`. Ajouter un client = ajouter un JSON dans `configs/`.
+
+**Trackers — bascule API → UI** : le tracker actuel (`tracker_ui.py`) crawle Perplexity en simulant un utilisateur humain (Chrome + Patchright). C'est le tracker **actif aujourd'hui** (88 runs Sonar 2 produits le 04/05). L'ancien tracker `tracker.py` mode API HTTP (Claude Haiku + GPT-4o-mini + Sonar API) est **endormi** mais conservé pour la traçabilité scientifique des 8098 mesures historiques (utiles pour étude de corrélation Sonar 2 vs autres modèles).
+
+**Storage agents** : table `agent_runs` ajoutée par `migrate_v3.py` à toutes les DBs. Stockage SQLite (pas JSON files) pour cohérence et requêtabilité.
+
+**Design system unifié** : `theme.py` source de vérité. Exporte palette (C1, C2, NG, BG), CSS_FLASK, DASH_CSS (avec override Bootstrap 5 vars dans :root), helpers (score_color, card_style, make_topbar, make_btn_dark, make_btn_primary, badge_style).
+
+---
+
+## 4. Arborescence (résumé)
+
+Voir `VOXA_TREE.md` pour l'arbre complet. Modules principaux :
+
+- **Racine** : entrypoints (`wsgi.py`, `server.py`, `app_router.py`), trackers, dashboard factory, modules métier (`action_pack`, `geo_optimizer`, `score_simulator`, `site_scanner`, etc.), tests, migrations
+- **`agents/`** : architecture multi-agents v3 (base + 4 agents : gap_analyzer, crawlability_agent, content_creator, quality_controller)
+- **`configs/`** : config JSON par client (7 clients actifs)
+- **`crawlers/`** : infra de scraping Perplexity (`base.py`, `perplexity.py`, `diagnose_response_dom.py`) + sessions persistantes Patchright + dump screenshots (gitignoré)
+- **`scripts/`** : shell scripts ops (`install_cron.sh`, `setup_ssh_pa.sh`, `voxa_nightly.sh`)
+
+---
+
+## 5. Modules racine — rôle de chaque fichier
+
+| Fichier | Rôle | Statut |
+|---|---|---|
+| `wsgi.py` | Entrypoint WSGI, DispatcherMiddleware, auto-discovery configs | ✅ Actif |
+| `server.py` | Serveur Flask central (landing, login, settings, /demo, /api/v1/*) | ✅ Actif |
+| `app_router.py` | Router landing + dict CLIENTS | ✅ Actif |
+| `dashboard_generic.py` | Factory `make_dashboard(slug)` Dash | ✅ Actif |
+| `tracker.py` | Tracker legacy mode API HTTP (Claude Haiku + GPT + Sonar API). 8098 mesures historiques. | 💤 Endormi (conservé pour traçabilité scientifique) |
+| `tracker_betclic.py` | Tracker Betclic 4 marchés (FR/PT/CI/PL), 88 prompts | ✅ Actif |
+| `tracker_generic.py` | Tracker générique JSON-config-driven | ✅ Actif |
+| `tracker_ui.py` | Tracker actuel : crawl Perplexity via Chrome + Patchright (simule humain) | ✅ Actif (production) |
+| `voxa_db.py` | Couche d'accès DB, dynamic config loading | ✅ Actif |
+| `voxa_engine.py` | Engine de génération de recommandations | ✅ Actif |
+| `theme.py` | Design system source de vérité | ✅ Actif |
+| `geo_optimizer.py` | Génération JSON-LD, FAQPage, Organization Schema, suggestions articles | ✅ Actif |
+| `action_pack.py` | Module V2 — pipeline "Pack Action Hebdo" | ✅ Actif |
+| `score_simulator.py` | Module V2 — simulateur de score | ✅ Actif |
+| `email_reporter.py` | Reporting mensuel par email (invoque `report_generator.py` en subprocess) | ⚠️ Voir §13 dette technique |
+| `report_generator.py` | Moteur de génération de rapports clients (importé par `server.py`, invoqué par `email_reporter.py`) | ⚠️ Voir §13 dette technique |
+| `site_scanner.py` | Crawlability scan (robots.txt, GPTBot/ClaudeBot/PerplexityBot) | ✅ Actif |
+| `migrate_v2.py` / `migrate_v3.py` | Migrations DB | 🔧 Outils |
+| `test_baseline.py` / `test_qc_rag.py` / `test_variance.py` | Tests | 🧪 |
+| `analyze_variance.py` | Analyse de variance des runs | 🔧 Outil |
+
+---
+
+## 6. Architecture multi-agents (`agents/`)
+
+**Classe abstraite** : `agents/base.py` — interface `Agent` avec input → output, log dans `agent_runs`, gestion success/failure/parent chaining/get_last_run.
+
+**Agents implémentés** :
+
+| Agent | Fichier | Rôle | État |
+|---|---|---|---|
+| Gap Analyzer | `gap_analyzer.py` | Analyse `sources` + `results` Perplexity, détecte les angles morts (seuil ≤ 60/100) | ✅ Stable (Phase 2B) |
+| Crawlability | `crawlability_agent.py` | Vérifie l'accès des bots IA (GPTBot, PerplexityBot, ClaudeBot) | ✅ Stable (renommé depuis `seo_agent`) |
+| Content Creator | `content_creator.py` | Pour chaque angle mort détecté : génère un paragraphe (150-200 mots) **+** schema JSON-LD FAQPage (2 paires Q&R) via API Claude. Output stocké en DB dans table `action_items`. Modes CLI : `--from-gap`, `--iterate`, `--n-items`, `--threshold`, `--target-score`, `--dry-run`, `--json`. Coût ~0.05$/item. | ✅ MVP (avec bug DB connu, voir §13) |
+| Quality Controller | `quality_controller.py` | Valide les contenus du Content Creator en re-crawlant Perplexity avec un prompt augmenté qui injecte le contenu ("Imagine que le site officiel publie ce contenu aujourd'hui..."). Pas de RAG, juste augmentation de prompt. | 🧪 En validation (~1/3 faux positifs détectés, refacto v2 prioritaire) |
+
+**Décisions actées** :
+- Framework : Anthropic SDK natif
+- Stockage outputs : table `agent_runs` SQLite (table dédiée `action_items` pour les outputs Content Creator)
+- Boucle orchestrateur : hybride max 5 itérations OR plateau
+- Génération recos : Option A (Python templates) → extensible vers Option C (Claude API)
+- Seuil angle mort : ≤ 60/100
+
+**À construire** : orchestrateur (Phase 2 finale) qui chaîne les agents jusqu'à un résultat satisfaisant.
+
+---
+
+## 7. Conventions de code (à respecter par toute modif)
+
+1. **Couleurs** : utiliser `theme.py` (C1, C2, NG, BG, helpers). **Aucune couleur hardcoded** dans les composants Dash. Bootstrap 5 vars overridées dans `:root` via DASH_CSS.
+2. **Multi-clients** : `dashboard_generic.py` factory + `configs/*.json`. Pas de `dashboard_*.py` par client.
+3. **Agents** : hériter de `agents.base.Agent`, logger dans `agent_runs`, CLI standalone (`python3 -m agents.X --slug Y`).
+4. **DB** : passer par `voxa_db.py`, pas de SQL inline dans les modules métier.
+5. **API LLMs** : Anthropic SDK pour Claude, pas LangChain ni CrewAI.
+6. **Configs** : tout ce qui change par client va dans `configs/{slug}.json`. Pas de paramètres durs dans le code.
+7. **Tests** : ajouter ou étendre les tests `test_*.py` à chaque feature non triviale.
+8. **Secrets** : variables d'environnement uniquement (`.env` non versionné). Ne jamais commit de clés API.
+9. **Suppression / refacto cross-fichiers** : `grep -rn "nom_du_fichier"` AVANT toute suppression. Jamais de `git rm` à l'aveugle.
+
+---
+
+## 8. Workflow déploiement
+
+**Local → Prod en 3 commandes** :
+
+```bash
+# Mac
+cd /Users/lucmonteil/Voxa
+git add -A && git commit -m "..." && git push
+
+# PythonAnywhere (console SSH)
+cd ~/Voxa && git pull
+# Puis Reload via onglet Web
+```
+
+**Trackers automatisés** : crons PythonAnywhere (onglet Tasks) appellent les trackers chaque nuit avec le chemin complet du virtualenv :
+```
+/home/lucsharper/.virtualenvs/voxa/bin/python /home/lucsharper/Voxa/tracker_betclic.py
+```
+
+---
+
+## 9. Variables d'environnement
+
+Fichier `.env` à la racine (gitignoré). Clés actuelles :
+
+| Variable | Usage | Statut |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Claude API (Content Creator + tracker.py legacy) | ✅ Active |
+| `OPENAI_API_KEY` | GPT-4o-mini (tracker.py legacy uniquement) | 💤 Plus utilisée en prod (mode API abandonné) |
+| `PERPLEXITY_API_KEY` | Sonar API (tracker.py legacy uniquement) | 💤 Plus utilisée en prod (mode API abandonné) |
+
+> Les deux clés legacy peuvent être conservées tant que `tracker.py` est gardé pour la traçabilité scientifique. Décision à prendre si on supprime un jour `tracker.py`.
+
+---
+
+## 10. `.gitignore` (confirmé propre)
+
+```
+voxa.db
+*.db
+__pycache__/
+*.pyc
+.env
+.DS_Store
+crawlers/sessions/
+crawlers/screenshots/
+```
+
+Aucun risque de fuite (clés, DBs, sessions Chrome, screenshots Perplexity).
+
+---
+
+## 11. État d'avancement (mai 2026)
+
+### Phase 0 — Sprint Betclic infra : 🟡 en cours
+
+Objectif : que les runs UI tournent automatiquement chaque nuit et que les données soient visibles sur PA pour les 4 marchés Betclic.
+
+- ✅ Scripts shell créés (`voxa_nightly.sh`, `setup_ssh_pa.sh`, `install_cron.sh`)
+- ❌ SSH key Mac → PA configurée (bloqueur : mot de passe PA à régénérer)
+- ❌ Test SCP manuel `voxa_betclic.db` → PA
+- ❌ Run all-markets exécuté (FR + PT + FR-CI + PL = 88 prompts)
+- ❌ Cron 02h00 installé sur Mac
+- ❌ Vérification du run nocturne
+
+**Critère de fin** : `lucsharper.pythonanywhere.com/betclic/` affiche les données UI sur les 4 marchés et les recommandations dans le tab Insights.
+
+### Phase 1 — Démo Betclic : 🔄 reporté
+
+Statut : reporté car Olivier Audibert a déjà été pitché. Trigger de redémarrage : son retour.
+
+### Phase 2 — Architecture multi-agents : 🟡 priorité 1
+
+- ✅ 2A : Migration DB v3 + classe abstraite Agent
+- ✅ 2B : Gap Analyzer
+- ✅ 2C : Crawlability Agent (renommage depuis seo_agent)
+- 🟡 2D : Content Creator (MVP fonctionnel mais bug table `action_items` à corriger sur `voxa_betclic.db`)
+- 🧪 2E : Quality Controller (~1/3 faux positifs, refacto v2 prioritaire : multi-crawl + nouveau template + filtre llm)
+- ❌ 2F : Orchestrateur hybride (max 5 itérations OR plateau)
+
+---
+
+## 12. Clients & configs actifs
+
+| Slug | Vertical | Statut commercial |
+|---|---|---|
+| `betclic` | Paris sportifs FR/PT/CI/PL | Pilote payant en cours |
+| `psg` | Foot Ligue 1 | Cas d'étude interne |
+| `ephilippe` | Politique | Démo prospect |
+| `lehavre` | Foot Ligue 1 | Démo prospect |
+| `saintetienne` | Foot Ligue 1/2 | Démo prospect |
+| `unibet` | Paris sportifs | Démo prospect |
+| `winamax` | Paris sportifs | Démo prospect |
+
+---
+
+## 13. Dette technique connue (à traiter quand bande passante)
+
+### Ticket DT-1 : `report_generator.py` + `email_reporter.py` — module reporting client inutilisé
+
+**Constat** : `report_generator.py` (moteur de génération de rapports) et `email_reporter.py` (envoi mensuel par email) sont actifs dans le code mais **plus utilisés** côté business — Voxa n'envoie plus de rapports mensuels automatiques aux clients.
+
+**Références dans le code** (vérifié par grep le 04/05/2026) :
+- `server.py:717` → `from report_generator import generate_report, CLIENTS`
+- `email_reporter.py:159` → invoque `report_generator.py` en subprocess
+- `report_generator.py` lui-même (header docstring CLI)
+
+**Pourquoi on a gardé pour l'instant** : suppression non triviale — il faut couper coordonnement les 3 points (route admin dans `server.py`, le cron `email_reporter.py` sur PA s'il tourne, le fichier `report_generator.py`). Risque de casser le serveur si fait à moitié.
+
+**Quand traiter** : quand on aura 1h calme pour faire la suppression coordonnée propre. Pas urgent.
+
+**Action de suppression (pour mémoire, à exécuter le moment venu)** :
+1. Supprimer la route `/admin/report/...` dans `server.py` (et l'import)
+2. Désactiver le cron `email_reporter.py` sur PA (onglet Tasks)
+3. `git rm report_generator.py email_reporter.py`
+4. Nettoyer les éventuelles entrées dans `voxa_db.py` ou autres modules
+5. Test smoke : reload PA + vérifier que toutes les routes répondent
+
+### Ticket DT-2 : Table `action_items` manquante dans `voxa_betclic.db`
+
+**Constat** : le Content Creator a généré son Pack #2 le 01/05 mais le INSERT a planté car la table `action_items` n'existe pas dans `voxa_betclic.db`. Probablement créée dans une DB historique mais pas propagée à toutes.
+
+**Action** : ajouter la création de `action_items` à `migrate_v3.py` (ou créer un `migrate_v3_1.py`) et l'appliquer sur toutes les DBs.
+
+**Quand** : prochaine session Phase 2D (Content Creator finalisation).
+
+### Ticket DT-3 : Quality Controller faux positifs
+
+**Constat** : le QC produit ~1/3 de faux positifs avec le template actuel d'augmentation de prompt.
+
+**Refacto v2 envisagée** : multi-crawl (plusieurs runs Perplexity au lieu d'un) + nouveau template d'augmentation + filtre LLM en post-traitement.
+
+**Quand** : priorité prochaine session Phase 2E.
+
+### Ticket DT-4 : Clés API legacy `OPENAI_API_KEY` / `PERPLEXITY_API_KEY`
+
+**Constat** : ces deux clés ne servent plus en prod (mode API abandonné), mais sont gardées pour `tracker.py` legacy.
+
+**Décision en suspens** : si un jour on supprime `tracker.py`, on supprime aussi ces clés du `.env`. Pas urgent.
+
+---
+
+## 14. Préférences de collaboration (rappel synthétique)
+
+Style de réponse attendu de Claude (web et Code) :
+
+- Explications claires et concises avant toute modif
+- Format **ancien code / nouveau code séparé**, avec chemin exact du fichier
+- Modifs <20 lignes / 1 fichier → bloc à coller dans la conversation
+- Au-delà → brief de session pour Claude Code, pas du copier-coller massif
+- Jamais de réécriture complète d'un fichier si quelques lignes changent
+- **Grep des références AVANT toute suppression** (leçon DT-1)
+- Pas de yes-man : challenge si meilleure option visible, propose 2-3 options avec trade-offs sur les décisions d'archi
+- Emails rédigés directement sans demander permission
+
+---
+
+*Dernière mise à jour : 04/05/2026*
+*À régénérer après chaque évolution majeure d'architecture (migration DB, ajout d'un agent, refacto cross-fichiers).*
