@@ -8,3 +8,6 @@ __pycache__/
 # Crawlers — sessions et outputs locaux
 crawlers/sessions/
 crawlers/screenshots/
+
+# Logs runtime
+logs/
