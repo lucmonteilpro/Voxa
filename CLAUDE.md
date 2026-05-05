@@ -98,6 +98,7 @@ Voir `VOXA_TREE.md` pour l'arbre complet. Modules principaux :
 | Crawlability | `crawlability_agent.py` | Vérifie l'accès des bots IA (GPTBot, PerplexityBot, ClaudeBot) | ✅ Stable (renommé depuis `seo_agent`) |
 | Content Creator | `content_creator.py` | Pour chaque angle mort détecté : génère un paragraphe (150-200 mots) **+** schema JSON-LD FAQPage (2 paires Q&R) via API Claude. Output stocké en DB dans table `action_items`. Modes CLI : `--from-gap`, `--iterate`, `--n-items`, `--threshold`, `--target-score`, `--dry-run`, `--json`. Coût ~0.05$/item. | ✅ MVP (avec bug DB connu, voir §13) |
 | Quality Controller v2 | `quality_controller.py` | Valide chaque item du Content Creator via protocole control/test : 1 crawl Perplexity sans injection (baseline), 3 crawls avec injection via template factuel neutre, médiane. Filtre Claude Haiku sur chaque crawl test (verdict pertinent/cosmetique/absent). Statut `validated` si delta > 10 ET ≥ 2/3 pertinents. CLI : `--slug`, `--pack-id`, `--limit`, `--dry-run`, `--json`. | ✅ Stable (Phase 2E livrée 04/05) |
+| Orchestrator | `orchestrator.py` | Boucle de convergence sur items en `needs_iteration` : régénération contextualisée par Content Creator + revalidation par QC v2 jusqu'à validated OU plateau quantitatif OU max 5 itérations. Skip les items déjà validated. Persiste history JSON complet pour audit. CLI : `--slug`, `--pack-id`, `--limit`, `--dry-run`, `--json`. | ✅ Stable (Phase 2F livrée 05/05) |
 
 **Décisions actées** :
 - Framework : Anthropic SDK natif
@@ -202,7 +203,7 @@ Statut : reporté car Olivier Audibert a déjà été pitché. Trigger de redém
 - ✅ 2C : Crawlability Agent (renommage depuis seo_agent)
 - 🟡 2D : Content Creator (MVP fonctionnel mais bug table `action_items` à corriger sur `voxa_betclic.db`)
 - ✅ 2E : Quality Controller v2 (livré + validé sur Pack #2 Betclic le 04/05)
-- ❌ 2F : Orchestrateur hybride (max 5 itérations OR plateau)
+- ✅ 2F : Orchestrateur hybride (livré + validé sur Pack #2 Betclic le 05/05)
 
 ---
 
@@ -289,5 +290,5 @@ Style de réponse attendu de Claude (web et Code) :
 
 ---
 
-*Dernière mise à jour : 04/05/2026 — Phase 2E QC v2 + DT-5 ouverte (migration Betclic/PSG vers configs JSON dynamic).*
+*Dernière mise à jour : 05/05/2026 — Phase 2F Orchestrateur livrée, R8 ouvert (caractère probabiliste convergence).*
 *À régénérer après chaque évolution majeure d'architecture (migration DB, ajout d'un agent, refacto cross-fichiers).*

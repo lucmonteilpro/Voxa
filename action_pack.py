@@ -203,15 +203,73 @@ def generate_pack(slug: str, n_items: int = 5, iterate: bool = False,
     return result
 
 
-def _generate_content(prompt: str, brand: str, vertical: str, category: str) -> str:
-    """Génère du contenu FAQ initial pour un prompt faible."""
-    system = (
+def _build_previous_attempts_block(previous_attempts: list) -> str:
+    """Construit le bloc contextuel injecté en tête du system prompt en cas de
+    régénération orchestrée (Phase 2F).
+    """
+    n = len(previous_attempts)
+    mot_tentatives = "tentative" if n == 1 else "tentatives"
+    suffix_precedente = "" if n == 1 else "s"
+    mot_chacune = "Elle a été rejetée" if n == 1 else "Chacune a été rejetée"
+    lines = [
+        "## CONTEXTE — TENTATIVES PRÉCÉDENTES REJETÉES",
+        "",
+        f"Tu as déjà tenté de produire du contenu pour cet item lors de "
+        f"{n} {mot_tentatives} précédente{suffix_precedente}. {mot_chacune} "
+        f"par le Quality Controller. Voici les détails pour que tu corriges "
+        f"les problèmes :",
+        "",
+    ]
+    for attempt in previous_attempts:
+        verdicts = attempt.get("verdicts", []) or []
+        counts = {}
+        for v in verdicts:
+            k = v.get("verdict", "?")
+            counts[k] = counts.get(k, 0) + 1
+        majoritaire = (max(counts.items(), key=lambda kv: kv[1])[0]
+                        if counts else "?")
+
+        lines.append(f"### Tentative {attempt.get('iteration', '?')} "
+                      f"(rejetée — verdict majoritaire : {majoritaire})")
+        content = (attempt.get("content") or "").strip()
+        if len(content) > 300:
+            content = content[:300] + "…"
+        lines.append(f'Contenu produit : "{content}"')
+        lines.append("Raisons du rejet (verdicts qualitatifs) :")
+        for v in verdicts:
+            raison = (v.get("raison") or "").strip()
+            if raison:
+                lines.append(f'- "{raison}"')
+        lines.append("")
+    lines.append(
+        "INSTRUCTION CRITIQUE : ton nouveau contenu doit ABSOLUMENT répondre "
+        "factuellement à la question posée tout en intégrant la marque de manière "
+        "pertinente. Ne reproduis pas les erreurs des tentatives précédentes."
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _generate_content(prompt: str, brand: str, vertical: str, category: str,
+                      previous_attempts: list | None = None) -> str:
+    """Génère du contenu FAQ initial pour un prompt faible.
+
+    Si `previous_attempts` est non-None et non-vide, un bloc contextuel décrivant
+    les tentatives précédentes rejetées par QC v2 est préfixé au system prompt
+    (Phase 2F orchestrateur). Comportement par défaut (None) strictement inchangé.
+    """
+    base_instructions = (
         f"Tu es un expert en contenu web optimisé pour les moteurs IA (GEO). "
         f"Écris un paragraphe de 150-200 mots qui répond directement à la question. "
         f"Mentionne {brand} dans les 2 premières phrases de façon factuelle. "
         f"Inclure des chiffres ou preuves concrètes si possible. "
         f"Ton professionnel, pas marketing. Texte brut uniquement."
     )
+    if previous_attempts:
+        system = _build_previous_attempts_block(previous_attempts) + base_instructions
+    else:
+        system = base_instructions
+
     try:
         return call_llm(system, prompt, llm="claude", max_tokens=400)
     except Exception as e:

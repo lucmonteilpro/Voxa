@@ -269,11 +269,16 @@ class ContentCreator(Agent):
             })
         return normalized
 
-    def _process_prompt(self, wp: dict, brand: str, vertical: str) -> dict:
+    def _process_prompt(self, wp: dict, brand: str, vertical: str,
+                         previous_attempts: list | None = None) -> dict:
         """Génère content + jsonld pour un prompt faible.
 
         Réutilise action_pack._generate_content et _content_to_faq.
         Mode iterate optionnel pour self-eval loop.
+
+        Si `previous_attempts` est non-None, propagé à `_generate_content` pour
+        régénération contextualisée (Phase 2F orchestrateur). Comportement par
+        défaut (None) strictement inchangé.
         """
         prompt_text = wp["text"]
         score_current = wp["score"]
@@ -297,7 +302,10 @@ class ContentCreator(Agent):
             n_iterations = result["n_iterations"]
         else:
             # Mode simple : 1 génération + 1 simulation
-            content = action_pack._generate_content(prompt_text, brand, vertical, category)
+            content = action_pack._generate_content(
+                prompt_text, brand, vertical, category,
+                previous_attempts=previous_attempts,
+            )
             sim = simulate(prompt_text, content, brand, vertical, llms=["claude"])
             score_predicted = sim["score_predicted"]
             n_iterations = 1
@@ -322,6 +330,54 @@ class ContentCreator(Agent):
             "status": "pending",
             "delta": score_predicted - score_current,
         }
+
+    # ─────────────────────────────────────────────
+    # API publique pour l'orchestrateur (Phase 2F)
+    # ─────────────────────────────────────────────
+    def regenerate_for_item(self, item: dict,
+                             previous_attempts: list | None = None) -> str:
+        """Régénère le content pour 1 item donné, optionnellement avec le contexte
+        des tentatives précédentes rejetées par QC v2 (Phase 2F orchestrateur).
+
+        Différences vs `execute()` (mode batch) :
+        - Travaille sur un seul item explicite (pas de Gap Analyzer / get_weak_prompts)
+        - Ne persiste rien (l'orchestrateur gère via _persist_orchestrator_results)
+        - Pas de check idempotence pack semaine
+        - Pas de mode iterate (si previous_attempts est fourni, le score est mesuré
+          par QC v2 réel à l'itération suivante, pas par self-eval)
+        - Retourne le content (string), pas le dict d'item complet
+
+        Args:
+            item: dict avec au minimum keys `prompt_text`, `category`, `language`,
+                  `score_current`. Typiquement une ligne lue de `action_items`.
+            previous_attempts: liste des tentatives précédentes rejetées par QC v2,
+                  format `[{iteration, content, qc_v2_status, delta, verdicts}, ...]`.
+                  None = première génération (équivalent comportement standard).
+
+        Returns:
+            Le content généré (string), 150-200 mots typiquement.
+        """
+        cfg = vdb.CLIENTS_CONFIG[self.slug]
+        brand = cfg["primary"]
+        vertical = cfg["vertical"]
+
+        wp = {
+            "text":     item["prompt_text"],
+            "score":    item.get("score_current", 0) or 0,
+            "category": item.get("category", "general"),
+            "language": item.get("language", "fr"),
+        }
+        # Force le path non-iterate : `previous_attempts` est incompatible avec
+        # `simulate_and_iterate` qui fait sa propre boucle de régénération interne.
+        saved_iterate = self.iterate
+        self.iterate = False
+        try:
+            result = self._process_prompt(wp, brand, vertical,
+                                            previous_attempts=previous_attempts)
+        finally:
+            self.iterate = saved_iterate
+
+        return result["content"]
 
 
 # ─────────────────────────────────────────────

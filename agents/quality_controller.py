@@ -354,6 +354,31 @@ class QualityController(Agent):
         return round(parsed.get(brand, {}).get("geo_score", 0))
 
     # ─────────────────────────────────────────────
+    # API publique pour l'orchestrateur (Phase 2F)
+    # ─────────────────────────────────────────────
+    def validate_single_content(self, item: dict, content: str) -> dict:
+        """Valide 1 item avec un contenu fraîchement généré (pour orchestrateur).
+
+        Ouvre son propre crawler (option simple : crawler par appel, pas de
+        partage). Ne persiste rien (l'orchestrateur gère).
+
+        Args:
+            item: dict avec keys prompt_text, category, language, score_current
+            content: nouveau contenu à valider (remplace item['content'])
+
+        Returns:
+            Le dict result identique à _validate_item (item_id, scores,
+            verdicts, qc_v2_status, etc.). Format compatible avec
+            QualityController._persist_qc_v2 si appel ultérieur souhaité.
+        """
+        cfg = vdb.CLIENTS_CONFIG[self.slug]
+        brand = cfg["primary"]
+        domain = cfg.get("domain") or f"https://www.{self.slug}.fr/"
+        item_with_content = {**item, "content": content}
+        with PerplexityCrawler(headless=False) as crawler:
+            return self._validate_item(crawler, item_with_content, brand, domain)
+
+    # ─────────────────────────────────────────────
     # Filtre Haiku
     # ─────────────────────────────────────────────
     def _evaluate_with_haiku(self, prompt: str, response_text: str, brand: str) -> dict:

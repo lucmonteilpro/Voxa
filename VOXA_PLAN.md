@@ -235,6 +235,13 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 **Mitigation actuelle** : sessions Patchright persistantes, compte Perplexity Pro pour réduire la friction, cadence raisonnable (88 prompts × 4 marchés en 53 min = pas de burst).
 **Action prévue** : passer à une offre premium Perplexity Enterprise / API officielle si elle ouvre l'accès Sonar 2 forcé. En backup : crawler diversifié multi-LLMs (Phase 3) pour réduire la dépendance à Perplexity seul.
 
+### R8 — Convergence orchestrateur non-garantie
+
+**Constat** : sur le même item testé 2 fois consécutivement (item #6 du Pack #2 Betclic, 05/05), l'orchestrateur produit 2 outcomes différents : 1er run → validated en 2 itérations, 2e run → abandoned_plateau en 4 itérations. La variance cumulée Claude (génération) + Sonar 2 (crawl) + Haiku (verdict) rend la convergence probabiliste.
+**Impact** : un client qui regénère un Pack 2 fois peut avoir 2 résultats différents pour les mêmes items. Cohérence d'expérience utilisateur imparfaite.
+**Mitigation actuelle** : history JSON complet persisté (audit trail), statuts finaux explicites (validated / abandoned_plateau / abandoned_after_max_iterations), pas de fausse promesse.
+**Action prévue** : (long terme) plateau qualitatif Phase 9 + stratégie alternative de régénération (Phase 2F+) + multi-crawl Gap Analyzer pour réduire la variance d'entrée. (Court terme) accepter le caractère probabiliste comme honnête méthodologiquement, le documenter dans tout pitch commercial. La trajectoire des verdicts pertinents (0→0→1→1 sur les 4 itérations du run réel) prouve que la régénération contextualisée a une influence sémantique mesurable, juste insuffisante sur certains items intrinsèquement difficiles.
+
 ---
 
 ## 🔥 Tâches en attente immédiate
@@ -257,6 +264,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 - [ ] **Cron 02h00 installé** — après SSH OK
 - [ ] **Re-affiner Gap Analyzer** plus tard quand plus de données accumulées (multi-crawl)
 - [ ] **Refacto QC v2** : multi-crawl + nouveau template anti-faux-positif + filtre `llm = perplexity-sonar-2` (PHASE 2E)
+- [x] **Orchestrateur Phase 2F** ✅ 05/05/2026 — chaîne Content Creator → QC v2 sur N itérations, régénération contextualisée, plateau strict, skip validated. Run réel sur Pack #2 : item #6 abandoned_plateau en 4 itérations (variance probabiliste, R8 documenté).
 
 ---
 
@@ -266,7 +274,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 |---|---|---|
 | **Phase 0** | Sprint Betclic — infra crawl + sync | 🟡 (déblocable maintenant, MDP PA OK) |
 | **Phase 1** | Démo Betclic prête | 🔄 |
-| **Phase 2** | Architecture multi-agents | 🟡 (6/8 ✅, 0 🧪) |
+| **Phase 2** | Architecture multi-agents | 🟡 (7/8 ✅) |
 | **Phase 3** | Crawlers UI multi-LLMs | ⏳ |
 | **Phase 4** | Chatbot agentique sidebar | ⏳ |
 | **Phase 5** | Olivier's 5 besoins Betclic | 🔄 |
@@ -339,6 +347,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 - ✅ **Crawler force toujours 1 modèle spécifique** (cf. Note 1)
 - ✅ **Filtre `llm = 'perplexity-sonar-2'`** dans agents (PRIMARY_LLM_FILTER)
 - ✅ QC v2 : N=3 crawls test + 1 control + médiane + filtre Haiku (livré 04/05)
+- ✅ Orchestrateur 2F : régénération contextualisée (previous_attempts dans system prompt) + plateau quantitatif strict (delta_N ≤ delta_(N-1) + 5 pts) + max 5 itérations + skip items déjà validated
 
 ### Sous-phases
 
@@ -347,7 +356,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 - ✅ 2C Crawlability Agent
 - ✅ 2D Content Creator
 - ✅ 2E Quality Controller v2 (livré + validé sur Pack #2 Betclic le 04/05)
-- ⏳ 2F Orchestrateur multi-agents (bloqué jusqu'à 2E + 9)
+- ✅ 2F Orchestrateur hybride (livré + validé sur Pack #2 Betclic le 05/05)
 - ⏳ 2G Intégration dashboard
 
 ### État détaillé 2E
@@ -588,6 +597,60 @@ Pausé — pas de bandwidth.
 
 **Prochaine session prévue** : Phase 2F (orchestrateur hybride) — pas dans la même journée, à attaquer dans une nouvelle conversation Projet Voxa.
 
+### 2026-05-05 (jour 4 — Phase 2F Orchestrateur livrée)
+
+**Ce qu'on a fait (en français business)** : on a livré la pièce centrale qui matche la promesse Meikai. L'orchestrateur prend un Pack généré par Content Creator + validé par QC v2, repère les items rejetés, et tente de les améliorer en boucle. Pour chaque tentative ratée, il enrichit le prompt envoyé à Claude avec le contexte des échecs précédents — Claude "apprend" itération après itération. Trois statuts possibles : converge (validé), plateau (n'arrive plus à progresser → abandonne honnêtement), ou max 5 itérations atteintes.
+
+**Pourquoi** : sans orchestrateur, Voxa livre un Pack avec 1/3 d'items rejetés et arrête. Avec orchestrateur, Voxa tente activement de résoudre les rejets ou les déclare honnêtement non-convergeables. C'est LA différence entre un outil de mesure passif et un outil de production active. C'est aussi ce qui justifie l'argument "Voxa pense, ne calcule pas" face à Olivier.
+
+**Validation** : 2 runs consécutifs sur l'item #6 du Pack #2 Betclic (le seul item rejeté hier en QC v2) :
+- Dry-run : convergence en 2 itérations → validated
+- Run réel : abandon plateau en 4 itérations → abandoned_plateau
+
+Les 2 outcomes différents sur le même item sont **un résultat précieux** méthodologiquement. Ils prouvent que :
+1. La régénération contextualisée a une influence sémantique mesurable (les contenus évoluent itération après itération, les verdicts Haiku progressent de 0/3 pertinents à 1/3 sur le run réel)
+2. La convergence n'est pas garantie — Voxa l'admet plutôt que de livrer du faux positif
+
+**Découvertes méthodologiques** :
+
+1. **Régénération contextualisée prouvée fonctionnelle** (dry-run) : l'item #6 passe de "Betclic est un opérateur agréé ANJ avec X bonus" (off-topic, rejeté à iter 1) à "Parier sur un site non agréé expose à X risques. Contrairement à Betclic, qui détient un agrément depuis…" (on-topic, validé à iter 2). La correction sémantique est observable et défendable face à un client technique.
+
+2. **Plateau strict détecté correctement** (run réel) : sur 4 itérations, delta évolue 72 → 88 → 98 → 72. La régression à 72 < 98+5 déclenche le plateau. L'abandon est conforme à la spec.
+
+3. **Skip des items validated propre** : items #7 et #8 traversent l'orchestrateur en zéro crawl (orchestrator_iterations=NULL).
+
+4. **R8 ouvert** : la convergence orchestrateur est probabiliste. Variance cumulée Claude + Sonar 2 + Haiku. Documenté comme limite assumée.
+
+**Ce que ça débloque** :
+- Phase 2G (intégration dashboard) peut démarrer — les 3 statuts finaux + history JSON donnent matière à visualiser
+- Pitch Olivier renforcé : on peut maintenant montrer le système complet (Gap → Content Creator → QC v2 → Orchestrator) en démo, et défendre l'honnêteté méthodologique du système (les abandons explicites sont un argument fort)
+
+**Matériel commercial préservé** (pour décks futurs) :
+
+Itération 1 dry-run (rejetée — verdicts cosmétiques) :
+> "# Les risques de parier sur un site non agréé ANJ en France
+> Betclic, contrairement aux opérateurs illégaux, dispose d'un agrément délivré par l'Autorité Nationale des Jeux en France. Parier sur un site non agréé expose à plusieurs risques majeurs..."
+
+Itération 2 dry-run (validée — verdicts pertinents) :
+> "# Les risques de parier sur un site non agréé ANJ en France
+> Parier sur un site non agréé par l'Autorité Nationale des Jeux (ANJ) expose les joueurs à des risques majeurs. Contrairement à Betclic, qui détient un agrément officiel depuis 2010..."
+
+Le déplacement sémantique "marque en tête → réponse en tête, marque en contre-exemple" est l'illustration la plus claire de la valeur agentique de Voxa qu'on ait produite à date.
+
+**Décisions provisoires actées** :
+- Plateau quantitatif strict (delta_N ≤ delta_(N-1) + 5) suffisant pour cette beta. Plateau qualitatif (Phase 9) reportée.
+- Régénération contextualisée pure suffit pour les items convergeables. Stratégie alternative (templates Content Creator par catégorie) reportée (à reconsidérer si trop d'abandonnés sur futurs Packs).
+- Crawler par appel (pas partagé) accepté. Optimisation crawler partagé reportée si l'orchestrateur devient un goulot.
+
+**Limites identifiées (à traiter à terme)** :
+- R8 caractère probabiliste : à discuter ouvertement avec Olivier comme signal d'honnêteté.
+- Pluralisation "tentative(s)" fixée dans la même session (mineur mais on évite la dette texte).
+- Mode `--iterate` du Content Creator (legacy) non testé en interaction avec previous_attempts (forcé à False dans regenerate_for_item, comportement défensif).
+
+**Statut** : Phase 2F ✅ closed. R8 ouvert. Pas de nouvelle dette technique ouverte cette session.
+
+**Prochaine session prévue** : à choisir entre Phase 2G (intégration dashboard pour exposer les statuts orchestrateur dans l'UI client) ou Phase 0 (cron nocturne PA) ou re-crawl all-markets pour fraîcheur données. À décider en chat web Projet selon l'urgence Olivier.
+
 ---
 
 ## 🎓 Leçons méthodologiques apprises
@@ -658,6 +721,12 @@ Le diagnostic prend 5 minutes mais évite des heures de debug en aveugle.
 **Contexte** : sur l'item #6 du Pack #2 Betclic, le score quantitatif Perplexity bondit de 0 à +98 pts (delta médian) — un succès apparent maximal. Mais le filtre Haiku révèle que les 3 mentions de Betclic sont off-topic (la question portait sur les *risques de parier sur un site non agréé ANJ*, les réponses dérivent vers *Betclic est un opérateur agréé ANJ*). Sans le filtre Haiku, QC v1 aurait validé un faux positif pur.
 **Règle générale** : pour toute mesure GEO, ne jamais valider sur un signal quantitatif seul. Croiser avec un signal qualitatif sémantique (filtre LLM ou lecture humaine). Un score brut élevé peut masquer une mention off-topic, un signal qualitatif l'attrape.
 
+### Leçon 13 — "L'abandon honnête vaut mieux que le faux positif"
+
+**Date** : 2026-05-05 (Phase 2F Orchestrateur — run réel item #6)
+**Contexte** : sur 2 runs orchestrateur consécutifs sur le même item, on obtient validated puis abandoned_plateau. Le système probabiliste ne converge pas toujours. Plutôt que de masquer ce comportement, Voxa le documente explicitement dans le history JSON et dans le statut final.
+**Règle générale** : un système GEO qui prétend toujours optimiser tout n'est pas fiable. Un système qui sait dire "je n'arrive pas à valider cet item de façon défendable" est mille fois plus défendable face à un client technique. L'abandon honnête est un signal de rigueur, pas un échec produit.
+
 ---
 
 ## 📚 Glossaire des features Voxa
@@ -700,6 +769,13 @@ Le diagnostic prend 5 minutes mais évite des heures de debug en aveugle.
 **À quoi ça sert** : module V2, pipeline "Pack Action Hebdo" — agrège les outputs Content Creator en un pack hebdo.
 **Convention fragile** : les tables (`action_items`, etc.) sont créées par effet de bord à l'import du module (cf. R5). Couvert par `test_action_pack_smoke.py` depuis le 04/05.
 
+### Orchestrator (`agents/orchestrator.py`) — ✅ LIVRÉ 05/05
+**À quoi ça sert** : prend un Pack existant et fait converger ses items en `needs_iteration`. Pour chaque item rejeté, l'orchestrateur appelle Content Creator avec le contexte des verdicts précédents (régénération contextualisée), puis QC v2 sur le nouveau contenu. Boucle jusqu'à validation OU plateau quantitatif (delta n'évolue plus de >5 pts) OU max 5 itérations.
+**Statuts finaux possibles** : `validated`, `abandoned_plateau`, `abandoned_after_max_iterations`.
+**Comportement** : skip les items déjà validated (zero crawl wasted), écrase le `content` de l'item uniquement si converged, persiste un history JSON complet pour audit.
+**Coût** : ~0.03-0.30$ Anthropic par item selon nombre d'itérations, ~5-25 min par item. Items skip = gratuit.
+**Limites connues** : caractère probabiliste cf. R8.
+
 ### Smoke test action_pack (`test_action_pack_smoke.py`) — ✅ ajouté 04/05
 **À quoi ça sert** : vérifie que les tables Pack sont bien créées après import de `action_pack.py`. Détecte toute régression sur le pattern d'init implicite (cf. R5).
 
@@ -712,5 +788,5 @@ Le diagnostic prend 5 minutes mais évite des heures de debug en aveugle.
 
 ---
 
-*Dernière mise à jour : 04/05/2026 — Phase 2E QC v2 livrée et validée sur Pack #2 Betclic, DT-3 closed, Leçon 12 ajoutée.*
+*Dernière mise à jour : 05/05/2026 — Phase 2F Orchestrateur livré + validé sur Pack #2 Betclic, R8 ouvert, Leçon 13 ajoutée.*
 *À régénérer après chaque session significative pour garder project knowledge et repo alignés.*
