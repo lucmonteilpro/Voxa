@@ -37,7 +37,8 @@ import theme as T
 from theme import (P, C1, C2, NG, BG, BG2, BG3, BD, BD2, W, T2, T3, RED, GRD,
                    FONTS_URL, DASH_CSS, score_color, score_label,
                    card_style, card_title_style, kpi_value_style, badge_style,
-                   FONT_BODY, BG_ACCENT, BG_ACCENT2, BG_OK, BG_ERR)
+                   FONT_BODY, BG_ACCENT, BG_ACCENT2, BG_OK, BG_ERR,
+                   WARN, BG_WARN, make_orchestrator_badge)
 
 BASE_DIR = Path(__file__).parent.resolve()
 
@@ -795,6 +796,130 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
             return card([html.Div("Module action_pack non disponible.",
                                   style={"color": T3, "fontSize": 12})])
 
+        # ─── Helper orchestrateur (Phase 2G) ───
+        def _orchestrator_timeline(item: dict) -> list:
+            """Construit le html.Details "Détail des N itérations" pour un item.
+
+            Retourne :
+              - [] si pas d'history orchestrateur (item skippé ou jamais traité)
+              - [html.Div(...)] avec un message discret si JSON corrompu
+              - [html.Details(...)] avec la timeline complète sinon
+            """
+            raw = item.get("orchestrator_history_json")
+            if not raw:
+                return []
+            try:
+                history = json.loads(raw)
+            except Exception:
+                return [html.Div(
+                    "(history orchestrateur corrompu)",
+                    style={"fontSize": 11, "color": T3, "fontStyle": "italic",
+                           "marginTop": 6, "fontFamily": FONT_BODY})]
+            if not isinstance(history, list) or not history:
+                return []
+
+            qc_status = item.get("qc_v2_status")
+            n_iters = len(history)
+            blocks = []
+            for idx, entry in enumerate(history):
+                iter_n = entry.get("iteration", idx + 1)
+                delta = entry.get("delta")
+                delta_txt = (f"{delta:+d} pts" if isinstance(delta, (int, float))
+                             else "—")
+                verdicts = entry.get("verdicts") or []
+                n_total = len(verdicts)
+                n_pertinent = sum(1 for v in verdicts
+                                   if v.get("verdict") == "pertinent")
+                content_full = entry.get("content") or ""
+                content_preview = (content_full[:300]
+                                    + ("…" if len(content_full) > 300 else ""))
+                is_last = (idx == n_iters - 1)
+                is_validated_last = is_last and qc_status == "validated"
+                marker = "✓" if is_validated_last else "•"
+                marker_color = NG if is_validated_last else T3
+
+                verdict_items = []
+                for v in verdicts:
+                    raison = (v.get("raison") or "").strip()
+                    if raison:
+                        verdict_items.append(html.Li(
+                            raison,
+                            style={"fontSize": 12, "color": T2,
+                                   "marginBottom": 3, "fontFamily": FONT_BODY},
+                        ))
+
+                blocks.append(html.Div([
+                    # Header itération
+                    html.Div([
+                        html.Span(marker, style={
+                            "color": marker_color, "fontWeight": 700,
+                            "fontSize": 14, "marginRight": 8}),
+                        html.Span(f"Itération {iter_n}", style={
+                            "fontWeight": 600, "fontSize": 13, "color": W,
+                            "fontFamily": FONT_BODY}),
+                        html.Span(
+                            f" — Δ {delta_txt} — {n_pertinent}/{n_total} verdicts pertinents",
+                            style={"fontSize": 12, "color": T2,
+                                   "marginLeft": 6, "fontFamily": FONT_BODY}),
+                    ], style={"marginBottom": 8}),
+
+                    # Contenu généré (preview + Details imbriqué si > 300 chars)
+                    html.Div([
+                        html.Div("CONTENU PRODUIT (extrait)", style={
+                            "fontSize": 9, "fontWeight": 600,
+                            "letterSpacing": "1.5px", "color": T3,
+                            "marginBottom": 4, "fontFamily": FONT_BODY}),
+                        html.Div(content_preview, style={
+                            "fontSize": 12, "color": T2, "lineHeight": "1.5",
+                            "background": BG3, "padding": "8px 12px",
+                            "borderRadius": 6, "border": f"0.5px solid {BD}",
+                            "whiteSpace": "pre-wrap", "fontFamily": FONT_BODY}),
+                        *([html.Details([
+                            html.Summary("voir le contenu complet", style={
+                                "fontSize": 11, "color": C1,
+                                "cursor": "pointer", "fontWeight": 500,
+                                "marginTop": 6, "fontFamily": FONT_BODY}),
+                            html.Pre(content_full, style={
+                                "fontSize": 12, "color": T2,
+                                "lineHeight": "1.5",
+                                "background": BG3, "padding": "10px 14px",
+                                "borderRadius": 6,
+                                "border": f"0.5px solid {BD}",
+                                "whiteSpace": "pre-wrap",
+                                "fontFamily": FONT_BODY,
+                                "marginTop": 6, "maxHeight": 280,
+                                "overflowY": "auto"}),
+                        ])] if len(content_full) > 300 else []),
+                    ], style={"marginBottom": 8}),
+
+                    # Verdicts (bullets, masqués si tous vides)
+                    *([html.Div([
+                        html.Div("VERDICTS QUALITATIFS", style={
+                            "fontSize": 9, "fontWeight": 600,
+                            "letterSpacing": "1.5px", "color": T3,
+                            "marginBottom": 4, "fontFamily": FONT_BODY}),
+                        html.Ul(verdict_items, style={
+                            "paddingLeft": 18, "marginTop": 0,
+                            "marginBottom": 0}),
+                    ])] if verdict_items else []),
+                ], style={
+                    "padding": "12px 14px", "background": BG2,
+                    "borderRadius": 8, "border": f"0.5px solid {BD}",
+                    "marginBottom": 12,
+                }))
+
+            iter_word = "itérations" if n_iters > 1 else "itération"
+            return [html.Details([
+                html.Summary([
+                    html.Span(f"▸ Détail des {n_iters} {iter_word} — ", style={
+                        "fontSize": 12, "color": C1, "fontWeight": 600,
+                        "fontFamily": FONT_BODY}),
+                    make_orchestrator_badge(qc_status),
+                ], style={"cursor": "pointer", "padding": "6px 0",
+                          "fontFamily": FONT_BODY}),
+                html.Div(blocks, style={"marginTop": 10}),
+            ], style={"marginTop": 6, "marginBottom": 4})]
+
         pack = get_latest_pack(slug)
         history = get_pack_history(slug, limit=8)
 
@@ -881,6 +1006,24 @@ def make_dashboard(slug: str, standalone: bool = False) -> dash.Dash:
                         html.Span(f" · {n_iter} itération{'s' if n_iter > 1 else ''}",
                                   style={"fontSize": 10, "color": T3, "marginLeft": 12}),
                     ], style={"marginBottom": 10}),
+                    # ─── Phase 2G : statut orchestrateur + timeline ───
+                    html.Div([
+                        html.Span("Orchestrateur : ", style={
+                            "fontSize": 12, "color": T3, "fontFamily": FONT_BODY}),
+                        make_orchestrator_badge(
+                            item.get("qc_v2_status")
+                            if item.get("orchestrator_iterations") else None),
+                        html.Span("  ·  Itérations : ", style={
+                            "fontSize": 12, "color": T3, "fontFamily": FONT_BODY,
+                            "marginLeft": 14}),
+                        html.Span(
+                            str(item.get("orchestrator_iterations") or "—"),
+                            style={"fontSize": 12, "fontWeight": 600,
+                                   "color": T2, "fontFamily": FONT_BODY}),
+                    ], style={"marginBottom": 10, "display": "flex",
+                              "alignItems": "center", "flexWrap": "wrap"}),
+                    *_orchestrator_timeline(item),
+                    # ──────────────────────────────────────────────────
                     html.Details([
                         html.Summary("Voir le contenu optimisé + JSON-LD",
                                      style={"fontSize": 12, "color": C1, "cursor": "pointer",

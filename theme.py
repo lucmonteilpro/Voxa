@@ -645,6 +645,59 @@ def badge_style(color: str = C1, bg_opacity: float = 0.12) -> dict:
     }
 
 
+def make_orchestrator_badge(status):
+    """Badge visuel pour le statut final de l'orchestrateur (Phase 2F).
+
+    Mapping :
+      - 'validated'                      → "✓ Validé"        (vert NG)
+      - 'abandoned_plateau'              → "↻ Stabilisé"     (orange WARN)
+      - 'abandoned_after_max_iterations' → "✕ Limite atteinte" (rouge tempéré RED)
+      - None / autre                     → "—" gris discret (pas de badge)
+
+    Tooltip natif via attribut HTML title=. Pas de JS.
+
+    Args:
+        status: valeur de qc_v2_status après passage orchestrateur, ou None
+                si l'orchestrateur n'a pas tourné sur cet item.
+
+    Returns:
+        html.Span (Dash) — soit un badge coloré + tooltip, soit un "—" discret.
+    """
+    from dash import html
+
+    mapping = {
+        "validated": (
+            "✓ Validé", NG, BG_OK,
+            "Le contenu produit a passé le contrôle qualité Voxa",
+        ),
+        "abandoned_plateau": (
+            "↻ Stabilisé", WARN, BG_WARN,
+            "L'orchestrateur n'a plus pu progresser après plusieurs tentatives",
+        ),
+        "abandoned_after_max_iterations": (
+            "✕ Limite atteinte", RED, BG_ERR,
+            "5 tentatives de régénération atteintes sans validation",
+        ),
+    }
+    spec = mapping.get(status)
+    if not spec:
+        return html.Span("—", style={
+            "color": T3, "fontSize": 12, "fontFamily": FONT_BODY,
+        })
+
+    label, color, bg, tooltip = spec
+    return html.Span(label, title=tooltip, style={
+        "display": "inline-block",
+        "padding": "3px 10px",
+        "borderRadius": 12,
+        "fontSize": 11,
+        "fontWeight": 600,
+        "background": bg,
+        "color": color,
+        "fontFamily": FONT_BODY,
+    })
+
+
 # ─────────────────────────────────────────────────────────────
 # COMPOSANTS DASH RÉUTILISABLES (existants, adaptés light)
 # ─────────────────────────────────────────────────────────────
