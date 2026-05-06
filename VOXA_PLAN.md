@@ -265,6 +265,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 - [ ] **Re-affiner Gap Analyzer** plus tard quand plus de données accumulées (multi-crawl)
 - [ ] **Refacto QC v2** : multi-crawl + nouveau template anti-faux-positif + filtre `llm = perplexity-sonar-2` (PHASE 2E)
 - [x] **Orchestrateur Phase 2F** ✅ 05/05/2026 — chaîne Content Creator → QC v2 sur N itérations, régénération contextualisée, plateau strict, skip validated. Run réel sur Pack #2 : item #6 abandoned_plateau en 4 itérations (variance probabiliste, R8 documenté).
+- [x] **Phase 2G Standard** ✅ 05/05/2026 — timeline orchestrateur dans tab Pack Action (badge statut + détail des itérations + dégradation graceful sur clients sans orchestrateur). Commit d977e9a.
 
 ---
 
@@ -274,7 +275,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 |---|---|---|
 | **Phase 0** | Sprint Betclic — infra crawl + sync | 🟡 (déblocable maintenant, MDP PA OK) |
 | **Phase 1** | Démo Betclic prête | 🔄 |
-| **Phase 2** | Architecture multi-agents | 🟡 (7/8 ✅) |
+| **Phase 2** | Architecture multi-agents | ✅ (8/8) |
 | **Phase 3** | Crawlers UI multi-LLMs | ⏳ |
 | **Phase 4** | Chatbot agentique sidebar | ⏳ |
 | **Phase 5** | Olivier's 5 besoins Betclic | 🔄 |
@@ -330,7 +331,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 
 ---
 
-## 🟡 Phase 2 — Architecture multi-agents
+## ✅ Phase 2 — Architecture multi-agents
 
 **Objectif** : matcher la promesse Meikai d'agents qui rebouclent jusqu'à un résultat satisfaisant.
 
@@ -357,7 +358,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 - ✅ 2D Content Creator
 - ✅ 2E Quality Controller v2 (livré + validé sur Pack #2 Betclic le 04/05)
 - ✅ 2F Orchestrateur hybride (livré + validé sur Pack #2 Betclic le 05/05)
-- ⏳ 2G Intégration dashboard
+- ✅ 2G Intégration dashboard (livrée 05/05)
 
 ### État détaillé 2E
 
@@ -443,6 +444,7 @@ Pausé — pas de bandwidth.
 | **DT-1** | `report_generator.py` + `email_reporter.py` à supprimer (reporting client inutilisé) | Faible | Ouvert (suppression coordonnée à planifier) |
 | **DT-4** | Clés API legacy `OPENAI_API_KEY` / `PERPLEXITY_API_KEY` à nettoyer si `tracker.py` est un jour supprimé | Faible | Ouvert (en attente décision) |
 | **DT-5** | Migrer Betclic (et PSG) vers le dynamic loader configs JSON | Faible | Ouvert (cohérence d'archi, double source de vérité actuelle) |
+| **DT-6** | Doctrine d'onboarding nouveau client | Faible | Ouvert (doctrine produit, non bloquant pour clients actifs) |
 
 ### Tickets clos
 
@@ -465,6 +467,16 @@ Pausé — pas de bandwidth.
 5. Test smoke : reload PA + vérifier que toutes les routes répondent
 
 **Quand traiter** : 1h calme, pas urgent.
+
+### Détail DT-6 — Doctrine d'onboarding nouveau client
+
+**Constat** : `make_dashboard(slug)` plante avec `OperationalError: no such table: prompts` pour les clients dont la DB n'a jamais été crawlée (ephilippe, lehavre, saintetienne, unibet, winamax). Comportement normal — la DB est créée vide à l'ajout du config JSON, mais les tables `prompts`/`runs`/`sources` ne sont créées qu'au 1er run du tracker.
+
+**Impact** : impossible d'ouvrir le dashboard d'un client jamais crawlé. Pour Betclic et PSG (déjà crawlés) : aucun impact.
+
+**Doctrine actuelle** : avant toute démo prospect, lancer un crawl initial pour ce client (`python3 tracker_ui.py --slug X`). Procédure manuelle pour l'instant.
+
+**Action future** : à 3-4 nouveaux clients à activer, créer un script `onboard_client.py` qui chaîne init DB + 1er crawl + 1er Pack.
 
 ---
 
@@ -651,6 +663,20 @@ Le déplacement sémantique "marque en tête → réponse en tête, marque en co
 
 **Prochaine session prévue** : à choisir entre Phase 2G (intégration dashboard pour exposer les statuts orchestrateur dans l'UI client) ou Phase 0 (cron nocturne PA) ou re-crawl all-markets pour fraîcheur données. À décider en chat web Projet selon l'urgence Olivier.
 
+### 2026-05-05 (jour 4 — suite — Phase 2G livrée)
+
+**Ce qu'on a fait (en français business)** : exposition des statuts orchestrateur dans le tab Pack Action du dashboard. Badge ↻ Stabilisé / ✓ Validé / ✕ Limite atteinte avec tooltips business-friendly. Timeline expandable par item montrant la trajectoire iter-par-iter (delta + ratio verdicts + contenu généré).
+
+**Pourquoi** : rendre démontrable la valeur agentique face à Olivier. L'item #6 du Pack #2 affiche maintenant ses 4 itérations avec deltas 72→88→98→72 et progression verdicts 0/3 → 0/3 → 1/3 → 1/3, preuve visuelle que l'orchestrateur tente activement de résoudre les rejets et abandonne honnêtement quand il plafonne.
+
+**Validation** : pytest smoke OK, 200 sur /betclic/ /psg/ /ephilippe/, validation visuelle sur localhost:5001/betclic/ tab Pack Action (badges, timeline, tooltips, dégradation graceful tous confirmés).
+
+**Découverte hors-scope** : DBs clients vides (ephilippe, lehavre, saintetienne, unibet, winamax) → make_dashboard plante avec `OperationalError 'no such table: prompts'`. Reformulé en doctrine produit (DT-6) plutôt que bug technique.
+
+**Bascule workflow** : le 05/05, abandon de l'onglet `</>` Code claude.ai au profit de Claude Code CLI/panel VSCode suite à des bugs de sync worktree. Méthodologie inscrite dans `CLAUDE.md` §15 (commit 4c54e7c).
+
+**Statut** : Phase 2G ✅ closed. Phase 2 globale ✅ closed (8/8). DT-6 ouverte (doctrine onboarding, non bloquante pour Olivier).
+
 ---
 
 ## 🎓 Leçons méthodologiques apprises
@@ -788,5 +814,5 @@ Le diagnostic prend 5 minutes mais évite des heures de debug en aveugle.
 
 ---
 
-*Dernière mise à jour : 05/05/2026 — Phase 2F Orchestrateur livré + validé sur Pack #2 Betclic, R8 ouvert, Leçon 13 ajoutée.*
+*Dernière mise à jour : 05/05/2026 — Phase 2G livrée, Phase 2 closed (8/8), DT-6 ouverte (doctrine onboarding), bascule workflow vers Claude Code CLI/panel VSCode.*
 *À régénérer après chaque session significative pour garder project knowledge et repo alignés.*
