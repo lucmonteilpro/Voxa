@@ -290,5 +290,50 @@ Style de réponse attendu de Claude (web et Code) :
 
 ---
 
-*Dernière mise à jour : 05/05/2026 — Phase 2F Orchestrateur livrée, R8 ouvert (caractère probabiliste convergence).*
+## 15. Méthodologie de session Claude Code CLI
+
+Convention d'utilisation de Claude Code (CLI ou panel VSCode) sur ce repo, à respecter à chaque session pour éviter les frictions de sync.
+
+### Avant la session (30 sec)
+
+```bash
+cd ~/Voxa
+git status          → working tree doit être clean
+git pull --ff-only  → synchronise depuis GitHub
+```
+
+### Démarrer la session
+
+- Soit `claude` dans le terminal VSCode (mode CLI)
+- Soit ouvrir l'extension Claude Code dans la panel VSCode (mode UI)
+- L'agent lit ce `CLAUDE.md` automatiquement et dispose du contexte projet
+- Coller le brief généré depuis le chat claude.ai (Projet Voxa)
+
+### Pendant la session
+
+- L'agent modifie, teste, propose des commits — visibilité fichier par fichier
+- Garder l'option "Ask before edits" activée pour valider chaque modif
+- Interrompre / corriger à tout moment si besoin
+
+### Après la session
+
+```bash
+git log --oneline -3   # pour vérifier le commit final
+git push               # pour pousser sur GitHub
+# Si branche feature : merger dans main
+git merge feat/xxx --ff-only && git push
+```
+
+### Discipline branches
+
+- **Petites évolutions / fixs / docs** : direct sur `main`
+- **Refactos cross-fichiers, migrations DB, gros changements** : créer une branche feature avant la session : `git checkout -b feat/phase-XX`
+
+### Outils à NE PAS utiliser pour ce repo
+
+- **L'onglet `</>` Code de claude.ai** : crée des worktrees fantômes locaux qui désynchronisent `main` avec les modifs WIP. Bug vécu sur Phase 2G le 05/05.
+
+---
+
+*Dernière mise à jour : 05/05/2026 — Phase 2G livrée, méthodologie CLI formalisée.*
 *À régénérer après chaque évolution majeure d'architecture (migration DB, ajout d'un agent, refacto cross-fichiers).*

@@ -11,3 +11,6 @@ crawlers/screenshots/
 
 # Logs runtime
 logs/
+
+# Config locale Claude Code
+.claude/
