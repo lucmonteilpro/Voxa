@@ -335,5 +335,27 @@ git merge feat/xxx --ff-only && git push
 
 ---
 
-*Dernière mise à jour : 05/05/2026 — Phase 2G livrée, méthodologie CLI formalisée.*
+## 16. Protocole de validation — leçons du 08/05/2026
+
+Règles de validation à appliquer pour toute phase, migration, ou déploiement, tirées des erreurs de synchro Mac → PA observées le 08/05/2026.
+
+### Règle 1 — Validation = vérification dans l'environnement cible
+
+Une phase n'est jamais déclarée fermée sur la base d'un test à blanc qui "ne plante pas". Elle est fermée uniquement quand le résultat attendu est vu dans l'environnement final (PA pour la prod, localhost acceptable seulement pour les phases internes).
+
+### Règle 2 — Symétrie dev → prod explicite
+
+Toute migration DB ou modif de schéma appliquée en local doit être accompagnée d'une procédure documentée pour la prod, dans le brief Code de la phase. Ne jamais supposer qu'un SCP nightly transporte les changements de schéma — il transporte du contenu, pas de la structure.
+
+### Règle 3 — Tester / Vérifier / Itérer
+
+Aucune phase n'est validée sans vérification visuelle dans l'environnement cible final. Le pitch commercial sera fait sur PA, donc toutes les démos sont validées sur PA, pas sur localhost. Si quelque chose s'affiche différemment entre les deux, l'environnement de référence est PA.
+
+### Règle 4 — Ouvrir un ticket DT plutôt qu'oublier
+
+Quand un mismatch est découvert (data manquante, colonne manquante, comportement inattendu), même hors scope de la session en cours : ouvrir un ticket DT-X dans VOXA_PLAN.md immédiatement. Ne jamais reporter à "plus tard sans trace".
+
+---
+
+*Dernière mise à jour : 08/05/2026 — DT-7 résolu, leçons protocolaires (§16) inscrites.*
 *À régénérer après chaque évolution majeure d'architecture (migration DB, ajout d'un agent, refacto cross-fichiers).*

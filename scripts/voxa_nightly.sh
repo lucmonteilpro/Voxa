@@ -135,6 +135,23 @@ for db_file in "${DBS_TO_SYNC[@]}"; do
     fi
 done
 
+# Sync voxa_accounts.db (DB agents : packs, items, alerts, recos)
+# Ajout DT-7 le 08/05/2026 — auparavant désynchro avec Mac
+ACCOUNTS_DB="voxa_accounts.db"
+if [ -f "$VOXA_DIR/$ACCOUNTS_DB" ]; then
+    echo "  → $ACCOUNTS_DB ($(du -h "$VOXA_DIR/$ACCOUNTS_DB" | cut -f1))"
+    if scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+        "$VOXA_DIR/$ACCOUNTS_DB" \
+        "$PA_USER@$PA_HOST:$PA_VOXA_PATH/$ACCOUNTS_DB"; then
+        echo "    ✓ Synced"
+    else
+        echo "    ✗ ÉCHEC SCP (exit code $?)"
+        SYNC_FAILED=$((SYNC_FAILED + 1))
+    fi
+else
+    echo "⚠ $ACCOUNTS_DB introuvable, skip"
+fi
+
 # ─────────────────────────────────────────────
 # Reload du dashboard PA
 # ─────────────────────────────────────────────

@@ -450,6 +450,7 @@ Pausé — pas de bandwidth.
 
 - ✅ **DT-2** — CLOSED le 04/05/2026 — faux positif. Le Pack #2 est bien en DB depuis le 02/05. Tables centralisées dans `voxa_accounts.db` (init via effet de bord à l'import de `action_pack.py`). Smoke test ajouté (`test_action_pack_smoke.py`). Voir aussi R5.
 - ✅ **DT-3** — CLOSED le 04/05/2026 — Quality Controller v2 livré, validé sur Pack #2 Betclic. Multi-crawl (1 control + 3 test), filtre Haiku, protocole control/test par item. Inversion de verdict v1→v2 sur item #6 démontre la valeur ajoutée (v1 aurait validé un faux positif quantitatif, v2 rejette grâce aux verdicts Haiku off-topic). Cf. journal du 04/05.
+- ✅ **DT-7** — CLOSED le 08/05/2026 — `voxa_nightly.sh` ne SCP que `voxa_betclic.db`, pas `voxa_accounts.db`. DB agents sur PA en retard de schéma (colonnes Phase 2 manquantes) et de data (Pack #2 absent). Fix : SCP manuel + patch `voxa_nightly.sh` pour ajouter le SCP automatique chaque nuit.
 
 ### Détail DT-1 (pour mémoire — à exécuter le moment venu)
 
@@ -677,6 +678,14 @@ Le déplacement sémantique "marque en tête → réponse en tête, marque en co
 
 **Statut** : Phase 2G ✅ closed. Phase 2 globale ✅ closed (8/8). DT-6 ouverte (doctrine onboarding, non bloquante pour Olivier).
 
+### 2026-05-08 (jour 7 — Phase 0 + DT-7 résolus, leçons inscrites)
+
+- Phase 0 (cron PA + SSH) déployée fonctionnellement, validée par test à blanc (88 runs OK, SCP DB Betclic → PA réussi).
+- Découverte tardive d'un mismatch data sur PA : `voxa_accounts.db` non synchronisée → Pack #2 invisible, schéma sans colonnes Phase 2. Résolu en SCP manuel + patch `voxa_nightly.sh` (DT-7).
+- 4 leçons protocolaires inscrites dans `CLAUDE.md` §16 : validation = vérif dans l'environnement cible, symétrie dev → prod explicite, tester / vérifier / itérer, ouvrir DT plutôt qu'oublier.
+- Phase 2 + Phase 0 désormais visibles end-to-end sur PA : timeline orchestrateur item #6, 4 itérations 72→88→98→72, Pack #2 du 02/05, alertes 07-08/05, classement vs 20 concurrents.
+- Pitch Olivier prêt techniquement.
+
 ---
 
 ## 🎓 Leçons méthodologiques apprises
@@ -814,5 +823,5 @@ Le diagnostic prend 5 minutes mais évite des heures de debug en aveugle.
 
 ---
 
-*Dernière mise à jour : 05/05/2026 — Phase 2G livrée, Phase 2 closed (8/8), DT-6 ouverte (doctrine onboarding), bascule workflow vers Claude Code CLI/panel VSCode.*
+*Dernière mise à jour : 08/05/2026 — Phase 0 + DT-7 résolus, leçons protocolaires (CLAUDE.md §16) inscrites.*
 *À régénérer après chaque session significative pour garder project knowledge et repo alignés.*
