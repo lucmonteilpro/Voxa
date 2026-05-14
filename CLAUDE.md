@@ -205,6 +205,20 @@ Statut : reporté car Olivier Audibert a déjà été pitché. Trigger de redém
 - ✅ 2E : Quality Controller v2 (livré + validé sur Pack #2 Betclic le 04/05)
 - ✅ 2F : Orchestrateur hybride (livré + validé sur Pack #2 Betclic le 05/05)
 
+### Phase 3 — Crawlers UI multi-LLMs : 🟡 en cours
+
+- ✅ Session 1 : Crawler Claude.ai Sonnet 4.6 Adaptatif (livré 13/05)
+- ⏳ Session 2 : Gemini
+- ⏳ Session 3 : Grok
+- ⏳ Session 4 : UI dashboard breakdown par LLM
+- ⏳ Session 5 : ChatGPT (compte Plus requis)
+
+**Note Claude.ai Adaptatif** : Claude.ai mode Adaptatif déclenche le web search à sa discrétion (~50% sur les prompts Betclic testés). Voxa traite ce taux comme une donnée GEO à part entière. Deux types de visibilité distincts à terme :
+- **GEO search-time** (sources citées via web search) — mesurable directement
+- **GEO recall-time** (marque citée depuis les connaissances du modèle, sans sources) — à exploiter en Session 1bis quand on aura le scoring associé
+
+Le champ `search_triggered` est persisté dans `crawl_metadata_json` de chaque run Claude pour mesurer le taux de déclenchement.
+
 ---
 
 ## 12. Clients & configs actifs

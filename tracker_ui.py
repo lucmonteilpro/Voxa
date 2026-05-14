@@ -45,6 +45,7 @@ Usage :
 """
 
 import argparse
+import json
 import random
 import sqlite3
 import sys
@@ -62,9 +63,16 @@ from tracker import (
     LANGUAGE_LABELS, MODEL,
 )
 
-# Crawler UI
+# Crawlers UI
 from crawlers.perplexity import PerplexityCrawler
+from crawlers.claude_ai import ClaudeAICrawler
 from crawlers.base import CrawlerResult
+
+# Mapping --llm → classe de crawler
+CRAWLER_CLASSES = {
+    "perplexity": PerplexityCrawler,
+    "claude": ClaudeAICrawler,
+}
 
 
 # ─────────────────────────────────────────────
@@ -92,32 +100,46 @@ ALL_MARKETS_ORDER = ["fr", "pt", "fr-ci", "pl"]
 # IDEMPOTENCE
 # ─────────────────────────────────────────────
 def get_prompts_already_crawled_today(conn: sqlite3.Connection,
-                                       language: Optional[str] = None) -> set:
+                                       language: Optional[str] = None,
+                                       llm_prefix: Optional[str] = None) -> set:
     """Retourne l'ensemble des prompt_id déjà crawlés en mode UI aujourd'hui.
 
     "Aujourd'hui" = même date calendaire (pas 24h glissantes).
-    On filtre sur run_date pour le jour, ET sur crawl_method='ui'.
+    On filtre sur crawl_method='ui' + optionnellement sur llm LIKE prefix%.
     """
     today = date.today().isoformat()
+    conditions = ["crawl_method = 'ui'", "DATE(created_at) = ?"]
+    params: list = [today]
+
     if language:
-        rows = conn.execute("""
-            SELECT DISTINCT prompt_id FROM runs
-            WHERE crawl_method = 'ui'
-              AND DATE(created_at) = ?
-              AND language = ?
-        """, (today, language)).fetchall()
-    else:
-        rows = conn.execute("""
-            SELECT DISTINCT prompt_id FROM runs
-            WHERE crawl_method = 'ui'
-              AND DATE(created_at) = ?
-        """, (today,)).fetchall()
+        conditions.append("language = ?")
+        params.append(language)
+
+    if llm_prefix:
+        conditions.append("llm LIKE ?")
+        params.append(f"{llm_prefix}%")
+
+    where = " AND ".join(conditions)
+    rows = conn.execute(
+        f"SELECT DISTINCT prompt_id FROM runs WHERE {where}", params
+    ).fetchall()
     return {row["prompt_id"] for row in rows}
 
 
 # ─────────────────────────────────────────────
 # DB persistence (étendue par rapport à tracker.py)
 # ─────────────────────────────────────────────
+def _ensure_metadata_column(conn: sqlite3.Connection) -> None:
+    """Ajoute crawl_metadata_json à la table runs si absente."""
+    try:
+        conn.execute(
+            "ALTER TABLE runs ADD COLUMN crawl_metadata_json TEXT"
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # colonne existe déjà
+
+
 def insert_run_with_ui_metadata(conn: sqlite3.Connection,
                                   prompt_id: int,
                                   language: str,
@@ -126,14 +148,19 @@ def insert_run_with_ui_metadata(conn: sqlite3.Connection,
 
     Retourne le run_id créé.
     """
+    _ensure_metadata_column(conn)
+
+    metadata_json = json.dumps(result.metadata) if result.metadata else None
+
     c = conn.cursor()
     c.execute("""
         INSERT INTO runs (
             prompt_id, llm, language, raw_response,
             is_demo, created_at,
-            screenshot_path, crawl_duration_ms, crawl_method
+            screenshot_path, crawl_duration_ms, crawl_method,
+            crawl_metadata_json
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         prompt_id,
         result.model_used or "perplexity-default",
@@ -144,6 +171,7 @@ def insert_run_with_ui_metadata(conn: sqlite3.Connection,
         result.screenshot_path,
         result.crawl_duration_ms,
         "ui",
+        metadata_json,
     ))
     run_id = c.lastrowid
     conn.commit()
@@ -311,7 +339,7 @@ def print_global_summary(global_stats: dict):
 # ─────────────────────────────────────────────
 # Crawl d'un marché unique
 # ─────────────────────────────────────────────
-def crawl_market(crawler: PerplexityCrawler,
+def crawl_market(crawler,
                   conn: sqlite3.Connection,
                   prompts: list,
                   language: str,
@@ -319,7 +347,8 @@ def crawl_market(crawler: PerplexityCrawler,
                   dry_run: bool,
                   force: bool,
                   global_idx_start: int = 0,
-                  global_total: int = 0) -> dict:
+                  global_total: int = 0,
+                  llm_prefix: Optional[str] = None) -> dict:
     """Crawl tous les prompts d'un marché donné.
 
     Retourne stats du marché.
@@ -336,7 +365,8 @@ def crawl_market(crawler: PerplexityCrawler,
     market_start = time.time()
 
     # Récupère les prompts déjà crawlés aujourd'hui (sauf si --force)
-    already_done = set() if force else get_prompts_already_crawled_today(conn, language)
+    already_done = (set() if force
+                    else get_prompts_already_crawled_today(conn, language, llm_prefix))
     if already_done and not force:
         print(f"\n[{language}] {len(already_done)} prompts déjà crawlés aujourd'hui, skip\n")
 
@@ -438,7 +468,8 @@ def run_ui_tracker(slug: str,
                     all_markets: bool = False,
                     limit: Optional[int] = None,
                     dry_run: bool = False,
-                    force: bool = False) -> None:
+                    force: bool = False,
+                    llm: str = "perplexity") -> None:
     """Lance le tracker UI sur les prompts du slug donné."""
 
     # ── 1) Setup DB & prompts ──
@@ -474,8 +505,10 @@ def run_ui_tracker(slug: str,
         if limit:
             prompts = prompts[:limit]
         # Compte combien seront skip (sans modifier la liste)
+        # llm_prefix sépare l'idempotence Perplexity vs Claude
+        llm_prefix = "claude" if llm == "claude" else "perplexity"
         if not force:
-            already = get_prompts_already_crawled_today(conn, mkt)
+            already = get_prompts_already_crawled_today(conn, mkt, llm_prefix)
             n_skipped_idempotence += sum(1 for p in prompts if p["id"] in already)
         market_prompts[mkt] = prompts
         n_total += len(prompts)
@@ -500,7 +533,10 @@ def run_ui_tracker(slug: str,
     global_start = time.time()
 
     # ── 4) Boucle de crawl par marché ──
-    with PerplexityCrawler(headless=False) as crawler:
+    crawler_class = CRAWLER_CLASSES.get(llm, PerplexityCrawler)
+    llm_prefix = "claude" if llm == "claude" else "perplexity"
+
+    with crawler_class(headless=False) as crawler:
         for mkt_idx, mkt in enumerate(markets_to_process):
             prompts = market_prompts[mkt]
             if not prompts:
@@ -519,6 +555,7 @@ def run_ui_tracker(slug: str,
                 brand_ids=brand_ids,
                 dry_run=dry_run,
                 force=force,
+                llm_prefix=llm_prefix,
             )
             print_market_summary(mkt, market_stats)
 
@@ -574,6 +611,9 @@ def main():
                         help="Crawl sans écrire en DB")
     parser.add_argument("--force", action="store_true",
                         help="Force le re-crawl même si déjà fait aujourd hui")
+    parser.add_argument("--llm", choices=["perplexity", "claude"],
+                        default="perplexity",
+                        help="LLM à crawler (défaut : perplexity)")
     args = parser.parse_args()
 
     run_ui_tracker(
@@ -583,6 +623,7 @@ def main():
         limit=args.limit,
         dry_run=args.dry_run,
         force=args.force,
+        llm=args.llm,
     )
 
 

@@ -68,6 +68,7 @@ class CrawlerResult:
     screenshot_path: Optional[str] = None
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
     error: Optional[str] = None            # si la query a échoué partiellement
+    metadata: dict = field(default_factory=dict)  # métadonnées crawler-spécifiques (ex: search_triggered)
 
     def to_dict(self) -> dict:
         """Sérialisation JSON-ready (utile pour debug / logs / export)."""
