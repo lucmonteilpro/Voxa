@@ -266,6 +266,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 - [ ] **Refacto QC v2** : multi-crawl + nouveau template anti-faux-positif + filtre `llm = perplexity-sonar-2` (PHASE 2E)
 - [x] **Orchestrateur Phase 2F** ✅ 05/05/2026 — chaîne Content Creator → QC v2 sur N itérations, régénération contextualisée, plateau strict, skip validated. Run réel sur Pack #2 : item #6 abandoned_plateau en 4 itérations (variance probabiliste, R8 documenté).
 - [x] **Phase 2G Standard** ✅ 05/05/2026 — timeline orchestrateur dans tab Pack Action (badge statut + détail des itérations + dégradation graceful sur clients sans orchestrateur). Commit d977e9a.
+- [x] **Phase 3 Session 1** ✅ 13/05/2026 — crawler Claude.ai + flag `--llm` + métadonnée `search_triggered` + batch 22 prompts FR Betclic. Commit 5a72956.
 
 ---
 
@@ -276,7 +277,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 | **Phase 0** | Sprint Betclic — infra crawl + sync | 🟡 (déblocable maintenant, MDP PA OK) |
 | **Phase 1** | Démo Betclic prête | 🔄 |
 | **Phase 2** | Architecture multi-agents | ✅ (8/8) |
-| **Phase 3** | Crawlers UI multi-LLMs | ⏳ |
+| **Phase 3** | Crawlers UI multi-LLMs | 🟡 (1/4 ✅) |
 | **Phase 4** | Chatbot agentique sidebar | ⏳ |
 | **Phase 5** | Olivier's 5 besoins Betclic | 🔄 |
 | **Phase 6** | Migration Hetzner | 🔄 |
@@ -377,15 +378,25 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 
 ---
 
-## ⏳ Phase 3 — Crawlers UI multi-LLMs
+## 🟡 Phase 3 — Crawlers UI multi-LLMs
 
 **Architecture cible** : 1 crawler = 1 modèle forcé.
 
+### Sous-phases
+
+- ✅ 3.1 : Crawler Claude.ai Sonnet 4.6 Adaptatif (livré 13/05/2026, commit 5a72956)
+- ⏳ 3.2 : Crawler Gemini
+- ⏳ 3.3 : Crawler Grok
+- ⏳ 3.4 : UI dashboard breakdown par LLM
+- ⏳ 3.5 : Crawler ChatGPT (compte Plus requis)
+
+### Checklist technique
+
+- [x] `crawlers/claude_ai.py` : Sonnet 4.6 Adaptatif (Chromium natif Patchright)
 - [ ] `crawlers/chatgpt.py` : force GPT-5.4 (ou ce qu'OpenAI permet)
-- [ ] `crawlers/claude_ai.py` : force Claude Sonnet 4.6
 - [ ] `crawlers/gemini.py` : force Gemini 3.1 Pro
-- [ ] `tracker_ui.py` : argument `--llm` (sonar / gpt / claude / gemini / all)
-- [ ] DB : runs séparées par crawler/modèle (ex : 1 prompt × 4 LLMs = 4 runs)
+- [x] `tracker_ui.py` : argument `--llm` (perplexity / claude, extensible gemini / grok / chatgpt / all)
+- [x] DB : runs séparées par crawler/modèle + colonne `crawl_metadata_json`
 - [ ] Vue dashboard : breakdown par LLM dans le ranking
 
 **Note méthodologique** : variance observée historiquement sur tous les LLMs.
@@ -686,6 +697,16 @@ Le déplacement sémantique "marque en tête → réponse en tête, marque en co
 - Phase 2 + Phase 0 désormais visibles end-to-end sur PA : timeline orchestrateur item #6, 4 itérations 72→88→98→72, Pack #2 du 02/05, alertes 07-08/05, classement vs 20 concurrents.
 - Pitch Olivier prêt techniquement.
 
+### 2026-05-13 (jour 12 — Phase 3 Session 1 Claude.ai livrée)
+
+- Crawler `claude_ai.py` livré (commit 5a72956), Chromium natif, Sonnet 4.6 Adaptatif détecté, sources extraites via clic sur l'accordéon.
+- Outil de diagnostic DOM rangé dans `crawlers/diagnostic/`.
+- `tracker_ui.py` supporte le flag `--llm claude` avec idempotence séparée par LLM.
+- **Découverte produit** : Claude.ai en mode Adaptatif déclenche le web search 38% du temps sur les prompts Betclic FR (les 62% restants sont du recall depuis connaissances). Métadonnée `search_triggered` persistée dans `crawl_metadata_json`.
+- **Insights business** : score Betclic 91.9/100 en search-time vs 81.0/100 en recall-time, 100% de mentions dans les deux régimes, 9.4 sources/run en moyenne quand search.
+- **Différenciation commerciale dégagée** : Voxa devient le seul outil à mesurer les 2 régimes de visibilité (search-time vs recall-time).
+- **Statut** : Phase 3 Session 1 ✅. Phase 3 à 1/4 sessions complétées. Sessions 2 (Gemini), 3 (Grok), 4 (UI breakdown) à venir.
+
 ---
 
 ## 🎓 Leçons méthodologiques apprises
@@ -823,5 +844,5 @@ Le diagnostic prend 5 minutes mais évite des heures de debug en aveugle.
 
 ---
 
-*Dernière mise à jour : 08/05/2026 — Phase 0 + DT-7 résolus, leçons protocolaires (CLAUDE.md §16) inscrites.*
+*Dernière mise à jour : 13/05/2026 — Phase 3 Session 1 livrée (crawler Claude.ai + métadonnée search_triggered + 22 runs FR Betclic en DB).*
 *À régénérer après chaque session significative pour garder project knowledge et repo alignés.*

@@ -207,7 +207,7 @@ Statut : reporté car Olivier Audibert a déjà été pitché. Trigger de redém
 
 ### Phase 3 — Crawlers UI multi-LLMs : 🟡 en cours
 
-- ✅ Session 1 : Crawler Claude.ai Sonnet 4.6 Adaptatif (livré 13/05)
+- ✅ Session 1 : Crawler Claude.ai Sonnet 4.6 Adaptatif (livré 13/05, commit 5a72956)
 - ⏳ Session 2 : Gemini
 - ⏳ Session 3 : Grok
 - ⏳ Session 4 : UI dashboard breakdown par LLM
