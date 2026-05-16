@@ -267,6 +267,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 - [x] **Orchestrateur Phase 2F** ✅ 05/05/2026 — chaîne Content Creator → QC v2 sur N itérations, régénération contextualisée, plateau strict, skip validated. Run réel sur Pack #2 : item #6 abandoned_plateau en 4 itérations (variance probabiliste, R8 documenté).
 - [x] **Phase 2G Standard** ✅ 05/05/2026 — timeline orchestrateur dans tab Pack Action (badge statut + détail des itérations + dégradation graceful sur clients sans orchestrateur). Commit d977e9a.
 - [x] **Phase 3 Session 1** ✅ 13/05/2026 — crawler Claude.ai + flag `--llm` + métadonnée `search_triggered` + batch 22 prompts FR Betclic. Commit 5a72956.
+- [x] **Phase 3 Session 2** ✅ 16/05/2026 — crawler Gemini mode Rapide + `--llm gemini` + batch 22 prompts FR Betclic (0% mentions Betclic, 0 sources URL, réponses courtes). Commit ee18fe8.
 
 ---
 
@@ -277,7 +278,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 | **Phase 0** | Sprint Betclic — infra crawl + sync | 🟡 (déblocable maintenant, MDP PA OK) |
 | **Phase 1** | Démo Betclic prête | 🔄 |
 | **Phase 2** | Architecture multi-agents | ✅ (8/8) |
-| **Phase 3** | Crawlers UI multi-LLMs | 🟡 (1/4 ✅) |
+| **Phase 3** | Crawlers UI multi-LLMs | 🟡 (2/4 ✅) |
 | **Phase 4** | Chatbot agentique sidebar | ⏳ |
 | **Phase 5** | Olivier's 5 besoins Betclic | 🔄 |
 | **Phase 6** | Migration Hetzner | 🔄 |
@@ -385,7 +386,7 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 ### Sous-phases
 
 - ✅ 3.1 : Crawler Claude.ai Sonnet 4.6 Adaptatif (livré 13/05/2026, commit 5a72956)
-- ⏳ 3.2 : Crawler Gemini
+- ✅ 3.2 : Crawler Gemini mode Rapide (livré 16/05/2026, commit ee18fe8)
 - ⏳ 3.3 : Crawler Grok
 - ⏳ 3.4 : UI dashboard breakdown par LLM
 - ⏳ 3.5 : Crawler ChatGPT (compte Plus requis)
@@ -394,8 +395,8 @@ Cette note doit être **complétée** à chaque session qui touche au sujet Perp
 
 - [x] `crawlers/claude_ai.py` : Sonnet 4.6 Adaptatif (Chromium natif Patchright)
 - [ ] `crawlers/chatgpt.py` : force GPT-5.4 (ou ce qu'OpenAI permet)
-- [ ] `crawlers/gemini.py` : force Gemini 3.1 Pro
-- [x] `tracker_ui.py` : argument `--llm` (perplexity / claude, extensible gemini / grok / chatgpt / all)
+- [x] `crawlers/gemini.py` : Gemini mode Rapide (Chromium natif Patchright, Google Search always-on)
+- [x] `tracker_ui.py` : argument `--llm` (perplexity / claude / gemini, extensible grok / chatgpt / all)
 - [x] DB : runs séparées par crawler/modèle + colonne `crawl_metadata_json`
 - [ ] Vue dashboard : breakdown par LLM dans le ranking
 
@@ -707,6 +708,23 @@ Le déplacement sémantique "marque en tête → réponse en tête, marque en co
 - **Différenciation commerciale dégagée** : Voxa devient le seul outil à mesurer les 2 régimes de visibilité (search-time vs recall-time).
 - **Statut** : Phase 3 Session 1 ✅. Phase 3 à 1/4 sessions complétées. Sessions 2 (Gemini), 3 (Grok), 4 (UI breakdown) à venir.
 
+### 2026-05-16 (jour 15 — Phase 3 Session 2 Gemini livrée)
+
+- Crawler `gemini.py` livré (commit ee18fe8), Chromium natif, Web Components Angular (model-response, processing-state, message-content).
+- Diagnostic DOM : 5 runs de diagnostic nécessaires pour résoudre les faux positifs login (mode anonyme Gemini a le contenteditable visible, corrigé par détection `button[aria-label*="sélecteur de mode"]`).
+- `tracker_ui.py` supporte `--llm gemini` avec idempotence séparée.
+- **Découverte produit** : Gemini en mode Rapide (le mode par défaut) produit des réponses très courtes (174-491 chars) et ne mentionne pas Betclic nommément (0% mentions sur 22 prompts FR). Google Search toujours actif (100%) mais 0 sources avec URL extractibles — Gemini ne fournit pas de liens cliquables inline.
+- **Comparaison cross-LLM** (22 prompts FR Betclic) :
+
+| LLM | Mentions Betclic | Score GEO moyen | Sources/run | Search |
+|---|---|---|---|---|
+| Perplexity Sonar 2 | ~80% | 66.2 | ~15 | 100% |
+| Claude.ai Adaptatif | 100% | 85.1 (search=91.9, recall=81.0) | 9.4 (search) | 38% |
+| Gemini Rapide | 0% | 0.0 | 0 | 100% |
+
+- **Analyse** : Gemini mode Rapide est le LLM le moins favorable pour Betclic. À réévaluer en mode Pro (réponses plus longues, potentiellement plus de mentions). Le mode Rapide semble être un résumeur factuel qui évite de nommer les bookmakers.
+- **Statut** : Phase 3 Session 2 ✅. Phase 3 à 2/4 sessions complétées.
+
 ---
 
 ## 🎓 Leçons méthodologiques apprises
@@ -844,5 +862,5 @@ Le diagnostic prend 5 minutes mais évite des heures de debug en aveugle.
 
 ---
 
-*Dernière mise à jour : 13/05/2026 — Phase 3 Session 1 livrée (crawler Claude.ai + métadonnée search_triggered + 22 runs FR Betclic en DB).*
+*Dernière mise à jour : 16/05/2026 — Phase 3 Session 2 livrée (crawler Gemini + comparaison cross-LLM 3 crawlers).*
 *À régénérer après chaque session significative pour garder project knowledge et repo alignés.*

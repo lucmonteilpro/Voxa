@@ -208,7 +208,7 @@ Statut : reporté car Olivier Audibert a déjà été pitché. Trigger de redém
 ### Phase 3 — Crawlers UI multi-LLMs : 🟡 en cours
 
 - ✅ Session 1 : Crawler Claude.ai Sonnet 4.6 Adaptatif (livré 13/05, commit 5a72956)
-- ⏳ Session 2 : Gemini
+- ✅ Session 2 : Crawler Gemini mode Rapide (livré 16/05, commit ee18fe8)
 - ⏳ Session 3 : Grok
 - ⏳ Session 4 : UI dashboard breakdown par LLM
 - ⏳ Session 5 : ChatGPT (compte Plus requis)
@@ -218,6 +218,8 @@ Statut : reporté car Olivier Audibert a déjà été pitché. Trigger de redém
 - **GEO recall-time** (marque citée depuis les connaissances du modèle, sans sources) — à exploiter en Session 1bis quand on aura le scoring associé
 
 Le champ `search_triggered` est persisté dans `crawl_metadata_json` de chaque run Claude pour mesurer le taux de déclenchement.
+
+**Note Gemini** : Gemini en mode Rapide search systématiquement (100%, label "Google Search" toujours présent), contrairement à Claude.ai Adaptatif (38% search). Pas de mesure "recall-time GEO" possible sur Gemini — cohérent avec Perplexity (Sonar 2 force aussi le search 100%). Gemini ne fournit pas de sources cliquables inline (0 URLs extraites sur 22 runs). Réponses courtes en mode Rapide (174-491 chars), 0% mentions Betclic — à réévaluer en mode Pro si pertinent.
 
 ---
 
