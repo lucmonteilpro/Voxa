@@ -66,12 +66,14 @@ from tracker import (
 # Crawlers UI
 from crawlers.perplexity import PerplexityCrawler
 from crawlers.claude_ai import ClaudeAICrawler
+from crawlers.gemini import GeminiCrawler
 from crawlers.base import CrawlerResult
 
 # Mapping --llm → classe de crawler
 CRAWLER_CLASSES = {
     "perplexity": PerplexityCrawler,
     "claude": ClaudeAICrawler,
+    "gemini": GeminiCrawler,
 }
 
 
@@ -216,6 +218,8 @@ def insert_sources(conn: sqlite3.Connection,
     c = conn.cursor()
     n = 0
     for src in sources:
+        if not src.url:
+            continue  # skip text-only sources (url NOT NULL in DB)
         c.execute("""
             INSERT INTO sources
             (run_id, url, title, domain, position, snippet)
@@ -505,8 +509,9 @@ def run_ui_tracker(slug: str,
         if limit:
             prompts = prompts[:limit]
         # Compte combien seront skip (sans modifier la liste)
-        # llm_prefix sépare l'idempotence Perplexity vs Claude
-        llm_prefix = "claude" if llm == "claude" else "perplexity"
+        # llm_prefix sépare l'idempotence par LLM
+        llm_prefix_map = {"claude": "claude", "gemini": "gemini"}
+        llm_prefix = llm_prefix_map.get(llm, "perplexity")
         if not force:
             already = get_prompts_already_crawled_today(conn, mkt, llm_prefix)
             n_skipped_idempotence += sum(1 for p in prompts if p["id"] in already)
@@ -534,7 +539,8 @@ def run_ui_tracker(slug: str,
 
     # ── 4) Boucle de crawl par marché ──
     crawler_class = CRAWLER_CLASSES.get(llm, PerplexityCrawler)
-    llm_prefix = "claude" if llm == "claude" else "perplexity"
+    llm_prefix_map = {"claude": "claude", "gemini": "gemini"}
+    llm_prefix = llm_prefix_map.get(llm, "perplexity")
 
     with crawler_class(headless=False) as crawler:
         for mkt_idx, mkt in enumerate(markets_to_process):
@@ -611,7 +617,7 @@ def main():
                         help="Crawl sans écrire en DB")
     parser.add_argument("--force", action="store_true",
                         help="Force le re-crawl même si déjà fait aujourd hui")
-    parser.add_argument("--llm", choices=["perplexity", "claude"],
+    parser.add_argument("--llm", choices=["perplexity", "claude", "gemini"],
                         default="perplexity",
                         help="LLM à crawler (défaut : perplexity)")
     args = parser.parse_args()
