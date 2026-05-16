@@ -58,6 +58,18 @@ SEL_COPY_BUTTON_EN = 'button[aria-label*="Copy"]'
 SEL_SOURCES = '.location-clickable'
 SEL_SIGN_IN = 'a:has-text("Connexion"), a:has-text("Sign in"), button:has-text("Connexion"), button:has-text("Sign in")'
 
+# Mode menu (ouvert via le mode switcher)
+SEL_MODE_MENU_ITEM = 'button[role="menuitem"]'
+
+# ─────────────────────────────────────────────
+# Configuration : mode à forcer
+# ─────────────────────────────────────────────
+# Pro censure les paris sportifs (zone vide, confirmé 16/05/2026).
+# Rapide répond mais avec des réponses courtes sans citer les bookmakers.
+# On force Rapide pour garantir une réponse (le mode persiste entre sessions).
+DEFAULT_MODE_TO_FORCE = "Rapide"
+FALLBACK_MODEL_LABEL = "gemini-fallback"
+
 # ─────────────────────────────────────────────
 # Timing
 # ─────────────────────────────────────────────
@@ -162,7 +174,12 @@ class GeminiCrawler(LLMCrawler):
         page.goto(self.base_url, wait_until="domcontentloaded")
         page.wait_for_timeout(WAIT_AFTER_LOAD)
 
-        # 2) Lire le modèle actif
+        # 2) Forcer le mode Pro (ou celui configuré)
+        self._last_mode_selection_ok = False
+        if self.mode_to_force:
+            self._last_mode_selection_ok = self._select_mode(self.mode_to_force)
+
+        # 3) Lire le modèle actif (après sélection)
         model_label = self._read_mode_label()
 
         # 3) Tape le prompt
@@ -209,8 +226,11 @@ class GeminiCrawler(LLMCrawler):
         # 7) Extraction sources (cascade 3 niveaux)
         sources, src_stats = self._extract_sources()
 
-        # 8) Détection modèle
-        model_used = self._normalize_model(model_label)
+        # 8) Détection modèle (honnête : fallback si sélection a raté)
+        if self.mode_to_force and not self._last_mode_selection_ok:
+            model_used = f"{FALLBACK_MODEL_LABEL}-{self._normalize_model(model_label).replace('gemini-', '')}"
+        else:
+            model_used = self._normalize_model(model_label)
 
         # 9) Screenshot
         screenshot_path = self._save_screenshot("response")
@@ -246,6 +266,73 @@ class GeminiCrawler(LLMCrawler):
             except Exception:
                 continue
         return ""
+
+    def _select_mode(self, mode_name: str) -> bool:
+        """Force la sélection d'un mode Gemini (ex: 'Pro', 'Rapide').
+
+        Retourne True si succès, False si échec gracieux.
+        """
+        page = self._page
+
+        # Vérifier si déjà sur le bon mode
+        current = self._read_mode_label()
+        if current.lower() == mode_name.lower():
+            print(f"[{self.name}] ✓ Mode '{mode_name}' déjà actif")
+            return True
+
+        print(f"[{self.name}] → Mode actuel '{current}', "
+              f"sélection de '{mode_name}'...")
+
+        # Ouvrir le menu mode
+        try:
+            for sel in [SEL_MODE_SWITCHER_FR, SEL_MODE_SWITCHER_EN]:
+                btn = page.locator(sel).first
+                if btn.count() > 0:
+                    btn.click(timeout=3000)
+                    break
+            page.wait_for_timeout(800)
+        except Exception as e:
+            print(f"[{self.name}] ⚠ Échec ouverture menu mode : {e}")
+            return False
+
+        # Cliquer sur l'option souhaitée
+        try:
+            # Les options sont des button[role="menuitem"] avec classe bard-mode-li
+            # Le texte contient le nom du mode suivi d'une description
+            items = page.locator(SEL_MODE_MENU_ITEM)
+            found = False
+            for i in range(items.count()):
+                item = items.nth(i)
+                text = item.inner_text(timeout=2000).strip()
+                if text.lower().startswith(mode_name.lower()):
+                    item.click(timeout=2000)
+                    found = True
+                    break
+
+            if not found:
+                print(f"[{self.name}] ⚠ Option '{mode_name}' introuvable "
+                      f"dans le menu")
+                page.keyboard.press("Escape")
+                return False
+
+            page.wait_for_timeout(1000)
+        except Exception as e:
+            print(f"[{self.name}] ⚠ Échec sélection '{mode_name}' : {e}")
+            try:
+                page.keyboard.press("Escape")
+            except Exception:
+                pass
+            return False
+
+        # Vérifier la sélection
+        new_label = self._read_mode_label()
+        if new_label.lower() == mode_name.lower():
+            print(f"[{self.name}] ✓ Mode '{mode_name}' sélectionné")
+            return True
+        else:
+            print(f"[{self.name}] ⚠ Sélection non confirmée "
+                  f"(label actuel: '{new_label}')")
+            return False
 
     def _wait_for_response_complete(self) -> None:
         """Attend la fin du streaming Gemini.
@@ -310,20 +397,36 @@ class GeminiCrawler(LLMCrawler):
         try:
             text = page.evaluate("""
                 () => {
+                    // Helper : nettoyer le header Gemini ("Google Search\\nGemini a dit")
+                    function clean(raw) {
+                        let t = raw.trim();
+                        // Retirer le header "Google Search" + "Gemini a dit"
+                        t = t.replace(/^Google Search\\s*/i, '');
+                        t = t.replace(/^Gemini a dit\\s*/i, '');
+                        t = t.replace(/^Gemini said\\s*/i, '');
+                        return t.trim();
+                    }
+
                     // Stratégie 1 : message-content (web component)
                     const mc = document.querySelector('message-content');
-                    if (mc && mc.innerText.length > 50)
-                        return mc.innerText.trim();
+                    if (mc) {
+                        const t = clean(mc.innerText);
+                        if (t.length > 10) return t;
+                    }
 
                     // Stratégie 2 : model-response
                     const mr = document.querySelector('model-response');
-                    if (mr && mr.innerText.length > 50)
-                        return mr.innerText.trim();
+                    if (mr) {
+                        const t = clean(mr.innerText);
+                        if (t.length > 10) return t;
+                    }
 
                     // Stratégie 3 : markdown class
                     const md = document.querySelector('[class*="markdown"]');
-                    if (md && md.innerText.length > 50)
-                        return md.innerText.trim();
+                    if (md) {
+                        const t = clean(md.innerText);
+                        if (t.length > 10) return t;
+                    }
 
                     return '';
                 }
@@ -516,7 +619,8 @@ _original_init = GeminiCrawler.__init__
 
 
 def _patched_init(self, headless=False, session_dir=None,
-                  screenshot_dir=None, timeout_ms=60_000, slow_mo_ms=50):
+                  screenshot_dir=None, timeout_ms=60_000, slow_mo_ms=50,
+                  mode_to_force=DEFAULT_MODE_TO_FORCE):
     if session_dir is None:
         session_dir = (
             Path(__file__).parent.resolve() / "sessions" / "gemini_patchright"
@@ -529,6 +633,8 @@ def _patched_init(self, headless=False, session_dir=None,
         timeout_ms=timeout_ms,
         slow_mo_ms=slow_mo_ms,
     )
+    self.mode_to_force = mode_to_force
+    self._last_mode_selection_ok = False
 
 
 GeminiCrawler.__init__ = _patched_init
