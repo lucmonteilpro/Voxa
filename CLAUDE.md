@@ -219,7 +219,7 @@ Statut : reporté car Olivier Audibert a déjà été pitché. Trigger de redém
 
 Le champ `search_triggered` est persisté dans `crawl_metadata_json` de chaque run Claude pour mesurer le taux de déclenchement.
 
-**Note Gemini** : Gemini en mode Rapide search systématiquement (100%, label "Google Search" toujours présent), contrairement à Claude.ai Adaptatif (38% search). Pas de mesure "recall-time GEO" possible sur Gemini — cohérent avec Perplexity (Sonar 2 force aussi le search 100%). Gemini ne fournit pas de sources cliquables inline (0 URLs extraites sur 22 runs). Réponses courtes en mode Rapide (174-491 chars), 0% mentions Betclic — à réévaluer en mode Pro si pertinent.
+**Note Gemini** : Gemini mode **Pro censure les paris sportifs** (réponse vide, confirmé 16/05). Voxa force le mode **Rapide** qui répond mais cite rarement les bookmakers (10.5% mentions Betclic, score 7.9/100). Google Search toujours actif (100%) mais 0 sources URL extractibles. Réponses courtes (353 chars moyens). Gemini est le LLM le moins favorable pour le cas d'usage Betclic.
 
 ---
 

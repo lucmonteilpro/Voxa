@@ -720,9 +720,10 @@ Le déplacement sémantique "marque en tête → réponse en tête, marque en co
 |---|---|---|---|---|
 | Perplexity Sonar 2 | ~80% | 66.2 | ~15 | 100% |
 | Claude.ai Adaptatif | 100% | 85.1 (search=91.9, recall=81.0) | 9.4 (search) | 38% |
-| Gemini Rapide | 0% | 0.0 | 0 | 100% |
+| Gemini Rapide | 10.5% | 7.9 | 0 | 100% |
 
-- **Analyse** : Gemini mode Rapide est le LLM le moins favorable pour Betclic. À réévaluer en mode Pro (réponses plus longues, potentiellement plus de mentions). Le mode Rapide semble être un résumeur factuel qui évite de nommer les bookmakers.
+- **Analyse** : Gemini est le LLM le moins favorable pour Betclic. Le mode Pro **censure les paris sportifs** (réponse vide, confirmé 16/05). Le mode Rapide répond mais cite rarement les bookmakers (10.5%) et ne fournit pas de sources URL. Réponses courtes (353 chars moyens).
+- **Leçon protocolaire** (CLAUDE.md §16 confirmé) : le forçage explicite du mode/modèle avant batch est non-négociable. Le test minimal 3 prompts révèle ces problèmes en 5 min, avant un batch complet qui pollue la DB et fausse les conclusions cross-LLM.
 - **Statut** : Phase 3 Session 2 ✅. Phase 3 à 2/4 sessions complétées.
 
 ---
@@ -862,5 +863,5 @@ Le diagnostic prend 5 minutes mais évite des heures de debug en aveugle.
 
 ---
 
-*Dernière mise à jour : 16/05/2026 — Phase 3 Session 2 livrée (crawler Gemini + comparaison cross-LLM 3 crawlers).*
+*Dernière mise à jour : 16/05/2026 — Phase 3 Session 2 fix (Gemini Rapide forcé, Pro censure paris sportifs, chiffres cross-LLM corrigés).*
 *À régénérer après chaque session significative pour garder project knowledge et repo alignés.*
